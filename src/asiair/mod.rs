@@ -5,6 +5,7 @@ use tokio::net::UdpSocket;
 use rpc::handle_asiair_method;
 use rpc::protocol::{ASIAirRequest, ASIAirResponse};
 use local_ip_address::local_ip;
+use serde_json::{Value, Number}; // Import Value and Number for handling JSON types
 
 #[derive(Debug, Clone)]
 struct ASIAirState {
@@ -58,12 +59,16 @@ impl ASIAirSim {
                         let (result, code) = handle_asiair_method(&req.method, &req.params, self.state.clone());
 
                         let response = ASIAirResponse {
+                            id: match req.id {
+                                Value::Number(num) => Value::Number(num), // Wrap Number in Value::Number
+                                Value::String(s) => Value::String(s), // Handle string IDs
+                                _ => Value::Null, // Handle other cases
+                            },
+                            code: code as u8,
                             jsonrpc: "2.0".to_string(),
-                            timestamp: "2023-10-01T12:00:00Z".to_string(),
-                            code: code,
+                            timestamp: "2025-05-06T00:00:00Z".to_string(),
                             method: req.method.clone(),
                             result: result,
-                            id: req.id.clone(),
                         };
 
                         let json = serde_json::to_string(&response).unwrap();

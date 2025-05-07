@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 pub struct ASIAirRequest {
-    pub id: Number,
+    pub id: Value, // Changed to Value to handle both numbers and strings
     pub method: String,
     pub name: Option<String>,
     pub params: Option<Value>,
@@ -11,7 +11,7 @@ pub struct ASIAirRequest {
 
 #[derive(Serialize)]
 pub struct ASIAirResponse {
-    pub id: Number,
+    pub id: Value, // Changed to Value to match ASIAirRequest
     pub code: u8,
     pub jsonrpc: String,
     #[serde(rename = "Timestamp")]
