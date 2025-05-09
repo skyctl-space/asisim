@@ -1,6 +1,6 @@
-mod asiair;
+pub mod asiair;
 
-use asiair::ASIAirSim;
+use asisim::asiair::ASIAirSim;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -9,12 +9,12 @@ async fn main() -> std::io::Result<()> {
     // TODO: read config file how many and the parameters of the ASIAir
     let asiair_sim = ASIAirSim::new();
 
-    let simtask = tokio::spawn(async move {
-        asiair_sim.start().await.unwrap();
-    });
+    // Start the ASIAir simulator, which spawns two threads for UDP and TCP handling
+    asiair_sim.start().await.unwrap();
 
-    // Wait for both simulators (Ctrl+C will interrupt)
-    tokio::try_join!(simtask)?;
+    // Wait for Ctrl+C signal to terminate
+    tokio::signal::ctrl_c().await?;
+    println!("Shutting down ASIAir simulator...");
 
     Ok(())
 }

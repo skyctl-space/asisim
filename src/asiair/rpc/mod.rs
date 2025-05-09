@@ -2,17 +2,28 @@ use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
 pub mod protocol;
-mod discover;
+mod misc_handlers;
 
 use super::ASIAirState;
 
-pub fn handle_asiair_method(
+pub fn asiair_udp_handler(
     method: &str,
-    params: &Option<Value>,
-    state: Arc<Mutex<ASIAirState>>,
+    params: &Option<Value>, // Currently unused, consider removing if not needed
+    state: Arc<Mutex<ASIAirState>>, // Currently unused, consider removing if not needed
 ) -> (Value, u8) {
     match method {
-        "scan_air" => discover::handle(params, state),
+        "scan_air" => misc_handlers::scan_air(params, state),
+        _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
+    }
+}
+
+pub fn asiair_tcp_handler(
+    method: &str,
+    params: &Option<Value>, // Currently unused, consider removing if not needed
+    state: Arc<Mutex<ASIAirState>>, // Currently unused, consider removing if not needed
+) -> (Value, u8) {
+    match method {
+        "test_connection" => misc_handlers::test_connection(params, state),
         _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
     }
 }
