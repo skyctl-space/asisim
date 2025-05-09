@@ -5,23 +5,26 @@ use tokio::io::AsyncReadExt;
 use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::time::timeout;
-use rand::Rng; // Import random number generator
+use rand::Rng;
 use asisim::asiair::ASIAirSim;
 use serial_test::serial;
 
-#[tokio::test]
-#[serial]
-async fn test_udp_scan_air() {
+async fn setup_simulator() -> ASIAirSim {
     let asiair_sim = ASIAirSim::new();
 
     // Start the ASIAir simulator in the background
+    let simulator_clone = asiair_sim.clone();
     tokio::spawn(async move {
-        asiair_sim.start().await.unwrap();
+        simulator_clone.start().await.unwrap();
     });
 
     // Give the simulator some time to start
     tokio::time::sleep(Duration::from_secs(1)).await;
 
+    asiair_sim
+}
+
+async fn test_scan_air_request() {
     // Create a UDP socket to send a request
     let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
     socket.connect("127.0.0.1:4720").await.unwrap();
@@ -33,8 +36,7 @@ async fn test_udp_scan_air() {
     let request = json!({
         "id": random_id,
         "method": "scan_air",
-        "params": null,
-        "jsonrpc": "2.0"
+        "name": "iphone",
     });
     socket.send(request.to_string().as_bytes()).await.unwrap();
 
@@ -46,6 +48,7 @@ async fn test_udp_scan_air() {
     // Verify the response
     assert_eq!(response["id"], random_id);
     assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "scan_air");
     assert!(response["result"]["name"].is_string());
     assert!(response["result"]["ip"].is_string());
     assert!(response["result"]["ssid"].is_string());
@@ -56,22 +59,7 @@ async fn test_udp_scan_air() {
     assert_eq!(response["code"], 0);
 }
 
-#[tokio::test]
-#[serial]
-async fn test_tcp_test_connection() {
-    let asiair_sim = ASIAirSim::new();
-
-    // Start the ASIAir simulator in the background
-    tokio::spawn(async move {
-        asiair_sim.start().await.unwrap();
-    });
-
-    // Give the simulator some time to start
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Connect to the TCP server
-    let mut stream = TcpStream::connect("127.0.0.1:4720").await.unwrap();
-
+async fn test_tcp_test_connection_request(stream: &mut TcpStream) {
     // Generate a random ID for the request
     let random_id: u64 = rand::rng().random_range(1..1000);
 
@@ -80,7 +68,6 @@ async fn test_tcp_test_connection() {
         "id": random_id,
         "method": "test_connection",
         "params": null,
-        "jsonrpc": "2.0"
     });
     stream.write_all(request.to_string().as_bytes()).await.unwrap();
 
@@ -92,6 +79,71 @@ async fn test_tcp_test_connection() {
     // Verify the response
     assert_eq!(response["id"], random_id);
     assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "test_connection");
     assert_eq!(response["result"], "server connected!");
     assert_eq!(response["code"], 0);
+}
+
+async fn test_pi_set_time_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a test_connection request
+    let request = json!({
+        "id": random_id,
+        "method": "pi_set_time",
+        "params": "[{ \"time_zone\" : \"America\\/Costa_Rica\", \"hour\" : 18, \"min\" : 44, \"sec\" : 31, \"day\" : 6, \"year\" : 2025, \"mon\" : 5 } ]",
+    });
+    stream.write_all(request.to_string().as_bytes()).await.unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf)).await.unwrap().unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "pi_set_time");
+    assert_eq!(response["code"], 0);
+}
+
+async fn test_set_setting_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a test_connection request
+    let request = json!({
+        "id": random_id,
+        "method": "set_setting",
+        "params": "{ \"lang\" : \"en\" }",
+    });
+    stream.write_all(request.to_string().as_bytes()).await.unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf)).await.unwrap().unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "set_setting");
+    assert_eq!(response["code"], 0);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_asiair_protocol() {
+    let _simulator = setup_simulator().await;
+
+    // Connect to the TCP server
+    let mut stream = TcpStream::connect("127.0.0.1:4720").await.unwrap();
+
+    test_scan_air_request().await;
+    test_tcp_test_connection_request(&mut stream).await;
+    test_pi_set_time_request(&mut stream).await;
+    test_set_setting_request(&mut stream).await;
 }

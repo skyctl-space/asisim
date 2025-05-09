@@ -1,4 +1,5 @@
 mod rpc;
+mod rtc;
 
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, UdpSocket};
@@ -6,8 +7,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use rpc::{asiair_udp_handler, asiair_tcp_handler};
 use rpc::protocol::{ASIAirRequest, ASIAirResponse};
 use local_ip_address::local_ip;
-use serde_json::{Value, Number}; // Import Value and Number for handling JSON types
-use log::debug;
 
 #[derive(Debug, Clone)]
 struct ASIAirState {
@@ -18,6 +17,9 @@ struct ASIAirState {
     model: String,
     ssid: String,
     connect_lock: bool,
+
+    rtc: rtc::RTC,
+    language: String,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +41,8 @@ impl ASIAirSim {
                 model: "ZWO AirPlus-RK3568 (Linux)".to_string(),
                 ssid: "ASIAir SIM".to_string(),
                 connect_lock: false,
+                rtc: rtc::RTC::new(),
+                language: "en".to_string(),
             })),
         }
     }
@@ -93,31 +97,44 @@ impl ASIAirSim {
                 let tcp_state = tcp_state.clone();
                 tokio::spawn(async move {
                     let mut buf = [0u8; 2048];
-                    let len = stream.read(&mut buf).await.unwrap();
-                    let data = &buf[..len];
+                    loop {
+                        match stream.read(&mut buf).await {
+                            Ok(len) if len > 0 => {
+                                let data = &buf[..len];
 
-                    if let Ok(text) = std::str::from_utf8(data) {
-                        log::debug!("Received TCP from {}: {}", addr, text);
+                                if let Ok(text) = std::str::from_utf8(data) {
+                                    log::debug!("Received TCP from {}: {}", addr, text);
 
-                        match serde_json::from_str::<ASIAirRequest>(text) {
-                            Ok(req) => {
-                                let (result, code) = asiair_tcp_handler(&req.method, &req.params, tcp_state);
+                                    match serde_json::from_str::<ASIAirRequest>(text) {
+                                        Ok(req) => {
+                                            let (result, code) = asiair_tcp_handler(&req.method, &req.params, tcp_state.clone());
 
-                                let response = ASIAirResponse {
-                                    id: req.id,
-                                    code: code as u8,
-                                    jsonrpc: "2.0".to_string(),
-                                    timestamp: "2025-05-06T00:00:00Z".to_string(),
-                                    method: req.method.clone(),
-                                    result: result,
-                                };
+                                            let response = ASIAirResponse {
+                                                id: req.id,
+                                                code: code as u8,
+                                                jsonrpc: "2.0".to_string(),
+                                                timestamp: "2025-05-06T00:00:00Z".to_string(),
+                                                method: req.method.clone(),
+                                                result: result,
+                                            };
 
-                                let json = serde_json::to_string(&response).unwrap();
-                                stream.write_all(json.as_bytes()).await.unwrap();
-                                log::debug!("Sent TCP response to {}: {}", addr, json);
+                                            let json = serde_json::to_string(&response).unwrap();
+                                            stream.write_all(json.as_bytes()).await.unwrap();
+                                            log::debug!("Sent TCP response to {}: {}", addr, json);
+                                        }
+                                        Err(err) => {
+                                            eprintln!("Failed to parse TCP JSON-RPC: {}", err);
+                                        }
+                                    }
+                                }
+                            }
+                            Ok(_) => {
+                                log::debug!("TCP connection from {} closed", addr);
+                                break;
                             }
                             Err(err) => {
-                                eprintln!("Failed to parse TCP JSON-RPC: {}", err);
+                                eprintln!("Error reading from TCP stream: {}", err);
+                                break;
                             }
                         }
                     }

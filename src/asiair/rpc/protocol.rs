@@ -1,11 +1,11 @@
-use serde_json::{Number, Value};
+use serde_json::Value;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 pub struct ASIAirRequest {
     pub id: Value, // Changed to Value to handle both numbers and strings
     pub method: String,
-    pub name: Option<String>,
+    pub _name: Option<String>,
     pub params: Option<Value>,
 }
 
