@@ -10,13 +10,10 @@ use asisim::ASIAirSim;
 use serial_test::serial;
 
 async fn setup_simulator() -> ASIAirSim {
-    let asiair_sim = ASIAirSim::new();
+    let mut asiair_sim = ASIAirSim::new();
 
     // Start the ASIAir simulator in the background
-    let simulator_clone = asiair_sim.clone();
-    tokio::spawn(async move {
-        simulator_clone.start().await.unwrap();
-    });
+    asiair_sim.start().await.unwrap();
 
     // Give the simulator some time to start
     tokio::time::sleep(Duration::from_secs(1)).await;
