@@ -1,0 +1,18 @@
+[package]
+name = "asisim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+local-ip-address = "0.6.5"
+env_logger = "0.11.8"
+log = "0.4.27"
+chrono = "0.4.41"
+chrono-tz = "0.10.3"
+
+[dev-dependencies]
+rand = "0.9.1"
+serial_test = "2"

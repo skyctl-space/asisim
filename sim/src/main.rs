@@ -1,6 +1,4 @@
-pub mod asiair;
-
-use asisim::asiair::ASIAirSim;
+use asisim::ASIAirSim;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {

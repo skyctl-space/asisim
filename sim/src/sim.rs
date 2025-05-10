@@ -1,32 +1,27 @@
-mod rpc;
-mod rtc;
-
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use rpc::{asiair_udp_handler, asiair_tcp_handler};
-use rpc::protocol::{ASIAirRequest, ASIAirResponse};
+use crate::rpc::{asiair_udp_handler, asiair_tcp_handler};
+use crate::rpc::protocol::{ASIAirRequest, ASIAirResponse};
 use local_ip_address::local_ip;
+use crate::rtc;
+
+use super::ASIAirSim;
 
 #[derive(Debug, Clone)]
-struct ASIAirState {
-    name: String,
-    guid: String,
-    ip: String,
-    is_pi4: bool,
-    model: String,
-    ssid: String,
-    connect_lock: bool,
+pub struct ASIAirState {
+    pub name: String,
+    pub guid: String,
+    pub ip: String,
+    pub is_pi4: bool,
+    pub model: String,
+    pub ssid: String,
+    pub connect_lock: bool,
 
-    rtc: rtc::RTC,
-    language: String,
+    pub rtc: rtc::RTC,
+    pub language: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct ASIAirSim {
-    // ASIAir simulation state
-    state: Arc<Mutex<ASIAirState>>,
-}
 
 impl ASIAirSim {
     pub fn new() -> Self {

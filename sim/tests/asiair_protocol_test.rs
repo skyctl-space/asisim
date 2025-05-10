@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::time::timeout;
 use rand::Rng;
-use asisim::asiair::ASIAirSim;
+use asisim::ASIAirSim;
 use serial_test::serial;
 
 async fn setup_simulator() -> ASIAirSim {
