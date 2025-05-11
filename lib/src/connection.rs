@@ -7,31 +7,31 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
+use std::str::FromStr;
 
 use super::ASIAir;
-
-pub type Responder<T> = oneshot::Sender<Result<T, Box<dyn std::error::Error + Send + Sync>>>;
-
-#[derive(Debug)]
-pub enum ASIAirCommand {
-    Get {
-        method: String,
-        params: Vec<Value>,
-        tx: Responder<Value>,
-    },
-    Set {
-        method: String,
-        params: Vec<Value>,
-    },
-}
-
+use super::ASIAirCommand;
+use super::ASIAirPage;
+use super::EventState;
+use super::ExposureChangeEvent;
+use super::PiStatusEvent;
+use super::AnnotateEvent;
+use super::PlateSolveEvent;
 
 impl ASIAir {
     pub fn new(addr: SocketAddr) -> Self {
         let (connection_state_tx, _) = watch::channel(false);
+        let (camera_temperature_tx, _) = watch::channel(0.0);
+        let (cooler_power_tx, _) = watch::channel(0);
+        let (camera_control_change_tx, _) = watch::channel(());
+        let (exposure_change_tx, _) = watch::channel(ExposureChangeEvent::default());
+        let (pi_status_tx, _) = watch::channel(PiStatusEvent::default());
+        let (annotate_tx, _) = watch::channel(AnnotateEvent::default());
+        let (plate_solve_tx, _) = watch::channel(PlateSolveEvent::default());
 
         ASIAir {
             addr,
+            cmd_timeout: Duration::from_secs(5),
             tx: None,
             pending_responses: Arc::new(Mutex::new(HashMap::new())),
             shutdown_tx: None,
@@ -39,6 +39,13 @@ impl ASIAir {
             should_be_connected: Arc::new(AtomicBool::new(false)),
             connected: Arc::new(AtomicBool::new(false)),
             connection_state_tx,
+            camera_temperature_tx,
+            cooler_power_tx,
+            camera_control_change_tx,
+            exposure_change_tx,
+            pi_status_tx,
+            annotate_tx,
+            plate_solve_tx,
         }
     }
 
@@ -96,9 +103,19 @@ impl ASIAir {
         let mut shutdown_writer_rx = shutdown_rx.clone();
         let mut shutdown_watchdog_rx = shutdown_rx.clone();
         let reconnect_tx = self.reconnect_tx.clone().unwrap();
+        let reconnect_tx_reader = self.reconnect_tx.clone().unwrap();
+        let should_be_connected = self.should_be_connected.clone();
 
         self.connected.store(true, Ordering::SeqCst);
         let _ = self.connection_state_tx.send(true); // Notify that we are connected
+        
+        let camera_temperature_tx = self.camera_temperature_tx.clone();
+        let cooler_power_tx = self.cooler_power_tx.clone();
+        let camera_control_change_tx = self.camera_control_change_tx.clone();
+        let exposure_change_tx = self.exposure_change_tx.clone();
+        let pi_status_tx = self.pi_status_tx.clone();
+        let annotate_tx = self.annotate_tx.clone();
+        let plate_solve_tx = self.plate_solve_tx.clone();
 
         tokio::spawn(async move {
             loop {
@@ -111,10 +128,10 @@ impl ASIAir {
                         let (response_tx, response_rx) = oneshot::channel();
                         let command = ASIAirCommand::Get {
                             method: "test_connection".to_string(),
-                            params: vec![],
+                            params: None,
                             tx: response_tx,
                         };
-                        log::debug!("Feeding watchdog...");
+                        log::debug!("Testing ASIAIR connection watchdog...");
                         if tx.send(command).await.is_ok() {
                             // Wait for the response with a timeout
                             match tokio::time::timeout(Duration::from_secs(2), response_rx).await {
@@ -141,17 +158,118 @@ impl ASIAir {
                 tokio::select! {
                     read_result = reader.read(&mut buf) => {
                         match read_result {
-                            Ok(0) => break, // EOF
+                            Ok(0) => { // EOF
+                                if should_be_connected.load(Ordering::SeqCst) {
+                                    // If we are still supposed to be connected, and the socket
+                                    // closed, trigger the reconnection loops
+                                    let _ = reconnect_tx_reader.send(()).await;
+                                }
+                                break
+                            },
                             Ok(len) => {
                                 if let Ok(response) = serde_json::from_slice::<Value>(&buf[..len]) {
-                                    if let Some(id) = response.get("id").and_then(|id| id.as_u64()) {
-                                        if let Some(tx) = pending_responses_reader
-                                            .lock()
-                                            .unwrap()
-                                            .remove(&(id as u32))
-                                        {
-                                            let _ = tx.send(Ok(response["result"].clone()));
+                                    // Check if we have an event or a jsonrpc response
+                                    if let Some(event) = response.get("Event") {
+                                        match event.as_str() {
+                                            Some("Temperature") => {
+                                                if let Some(temp) = response.get("value").and_then(|r| r.as_f64()) {
+                                                    let _ = camera_temperature_tx.send(temp as f32);
+                                                }
+                                            },
+                                            Some("CoolerPower") => {
+                                                if let Some(power) = response.get("value").and_then(|r| r.as_i64()) {
+                                                    let _ = cooler_power_tx.send(power as i32);
+                                                }
+                                            },
+                                            Some("CameraControlChange") => {
+                                                let _ = camera_control_change_tx.send(());
+                                            },
+                                            Some("Exposure") => {
+                                                if let Some(exp_us) = response.get("exp_us").and_then(|r| r.as_u64()) {
+                                                    if let Some(gain) = response.get("gain").and_then(|r| r.as_u64()) {
+                                                        if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
+                                                            if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
+                                                                if let Ok(state) = EventState::from_str(state) {
+                                                                    if let Ok(page) = ASIAirPage::from_str(page) {
+                                                                        let _ = exposure_change_tx.send(ExposureChangeEvent {
+                                                                            page: page,
+                                                                            state: state,
+                                                                            exp_us: exp_us,
+                                                                            gain: gain as u32,
+                                                                        });
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            Some("PiStatus") => {
+                                                if let Some(is_overtemp) = response.get("is_overtemp").and_then(|r| r.as_bool()) {
+                                                    if let Some(temp) = response.get("temp").and_then(|r| r.as_f64()) {
+                                                        if let Some(is_undervolt) = response.get("is_undervolt").and_then(|r| r.as_bool()) {
+                                                            if let Some(is_over_current) = response.get("is_over_current").and_then(|r| r.as_bool()) {
+                                                                let _ = pi_status_tx.send(PiStatusEvent {
+                                                                    is_overtemp: is_overtemp,
+                                                                    temp: temp as f32,
+                                                                    is_undervolt: is_undervolt,
+                                                                    is_over_current: is_over_current,
+                                                                });
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            Some("Annotate") => {
+                                                if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
+                                                    if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
+                                                        if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
+                                                            if let Ok(state) = EventState::from_str(state) {
+                                                                if let Ok(page) = ASIAirPage::from_str(page) {
+                                                                    let _ = annotate_tx.send(AnnotateEvent {
+                                                                        page: page,
+                                                                        tag: tag.to_string(),
+                                                                        state: state,
+                                                                    });
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            Some("PlateSolve") => {
+                                                if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
+                                                    if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
+                                                        if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
+                                                            if let Ok(state) = EventState::from_str(state) {
+                                                                if let Ok(page) = ASIAirPage::from_str(page) {
+                                                                    let _ = plate_solve_tx.send(PlateSolveEvent {
+                                                                        page: page,
+                                                                        tag: tag.to_string(),
+                                                                        state: state,
+                                                                    });
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            _ => {}
                                         }
+                                    } else if response.get("jsonrpc").is_some() {
+                                        if let Some(id) = response.get("id").and_then(|id| id.as_u64()) {
+                                            if let Some(tx) = pending_responses_reader
+                                                .lock()
+                                                .unwrap()
+                                                .remove(&(id as u32))
+                                            {
+                                                let _ = tx.send(Ok(response["result"].clone()));
+                                            } else {
+                                                log::warn!("No pending response for ID {}: ${:?}", id, response);
+                                            }
+                                        }
+                                    } else {
+                                        log::warn!("Unexpected response: {:?}", response);
                                     }
                                 }
                             }
@@ -179,11 +297,18 @@ impl ASIAir {
                         match command {
                             ASIAirCommand::Get { method, params, tx } => {
                                 let id = id_counter.fetch_add(1, Ordering::SeqCst);
-                                let request = json!({
-                                    "id": id,
-                                    "method": method,
-                                    "params": params,
-                                });
+                                let request = if let Some(params) = params {
+                                    json!({
+                                        "id": id,
+                                        "method": method,
+                                        "params": params,
+                                    })
+                                } else {
+                                    json!({
+                                        "id": id,
+                                        "method": method,
+                                    })
+                                };
                                 pending_responses_writer.lock().unwrap().insert(id, tx);
                                 let mut message = request.to_string();
                                 message.push_str("\r\n");
@@ -193,11 +318,18 @@ impl ASIAir {
                             }
                             ASIAirCommand::Set { method, params } => {
                                 let id = id_counter.fetch_add(1, Ordering::SeqCst);
-                                let request = json!({
-                                    "id": id,
-                                    "method": method,
-                                    "params": params,
-                                });
+                                let request = if let Some(params) = params {
+                                    json!({
+                                        "id": id,
+                                        "method": method,
+                                        "params": params,
+                                    })
+                                } else {
+                                    json!({
+                                        "id": id,
+                                        "method": method,
+                                    })
+                                };
                                 let mut message = request.to_string();
                                 message.push_str("\r\n");
                                 if let Err(e) = writer.write_all(message.as_bytes()).await {
@@ -270,28 +402,81 @@ impl ASIAir {
         self.connection_state_tx.subscribe()
     }
 
-    /// Test the connection to the ASIAir device
-    pub async fn test_connection(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn subscribe_camera_temperature(&self) -> watch::Receiver<f32> {
+        self.camera_temperature_tx.subscribe()
+    }
+
+    pub fn subscribe_cooler_power(&self) -> watch::Receiver<i32> {
+        self.cooler_power_tx.subscribe()
+    }
+
+    pub fn subscribe_camera_control_change(&self) -> watch::Receiver<()> {
+        self.camera_control_change_tx.subscribe()
+    }
+
+    pub fn subscribe_exposure_change(&self) -> watch::Receiver<ExposureChangeEvent> {
+        self.exposure_change_tx.subscribe()
+    }
+
+    pub fn subscribe_pi_status(&self) -> watch::Receiver<PiStatusEvent> {
+        self.pi_status_tx.subscribe()
+    }
+
+    pub fn subscribe_annotate(&self) -> watch::Receiver<AnnotateEvent> {
+        self.annotate_tx.subscribe()
+    }
+
+    pub fn subscribe_plate_solve(&self) -> watch::Receiver<PlateSolveEvent> {
+        self.plate_solve_tx.subscribe()
+    }
+
+    pub async fn rpc_request(
+        &self,
+        method: &str,
+        params: Option<Value>,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.should_be_connected.load(Ordering::SeqCst) {
+            return Err("Not connected".into());
+        }
         if let Some(tx) = &self.tx {
             let (response_tx, response_rx) = oneshot::channel();
             let command = ASIAirCommand::Get {
-                method: "test_connection".to_string(),
-                params: vec![],
+                method: method.to_string(),
+                params,
                 tx: response_tx,
             };
             tx.send(command).await.unwrap();
 
             // Wait for the response with a timeout
-            match tokio::time::timeout(std::time::Duration::from_secs(5), response_rx).await {
-                Ok(Ok(_)) => {
-                    Ok(())
+            match tokio::time::timeout(self.cmd_timeout, response_rx).await {
+                Ok(Ok(response)) => {
+                    response
                 }
                 Ok(Err(_)) | Err(_) => {
-                    Err("Failed to test connection".into())
+                    Err("Failed to get response".into())
                 }
             }
         } else {
             Err("Not connected".into())
+        }
+    }
+
+    /// Test the connection to the ASIAir device
+    pub async fn test_connection(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let response = self.rpc_request("test_connection", None).await;
+        if let Ok(value) = response {
+            if value.as_str() == Some("server connected!") {
+                Ok(())
+            } else {
+                return Err("Connection test failed: unexpected response".into());
+            }
+        } else {
+            response
+                .map(|_| ())
+                .map_err(|e| {
+                    log::debug!("Connection test failed: {}", e);
+                    e
+                })
         }
     }
 }

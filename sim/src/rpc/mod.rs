@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 pub mod protocol;
 mod misc_handlers;
+mod app_handlers;
 
 use super::ASIAirState;
 
@@ -27,6 +28,7 @@ pub fn asiair_tcp_handler(
         "test_connection" => misc_handlers::test_connection(params, state),
         "pi_set_time" => misc_handlers::pi_set_time(params, state),
         "set_setting" => misc_handlers::set_setting(params, state),
+        "get_app_state" => app_handlers::get_app_state(params, state),
         _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
     }
 }

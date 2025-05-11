@@ -96,8 +96,12 @@ name = "asiair"
 version = "0.1.0"
 dependencies = [
  "asisim",
+ "chrono",
+ "chrono-tz",
+ "derive",
  "env_logger",
  "log",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -188,6 +192,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -237,6 +242,12 @@ dependencies = [
  "once_cell",
  "parking_lot_core",
 ]
+
+[[package]]
+name = "derive"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72e3ae26c830a573f2e231fc2475f71fce4705609097cb9523abfc4007caed0b"
 
 [[package]]
 name = "either"

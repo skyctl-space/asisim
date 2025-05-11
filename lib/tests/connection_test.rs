@@ -14,7 +14,7 @@ mod tests {
 
 
     #[tokio::test]
-    async fn test_asiair_basics() {
+    async fn test_asiair_connection() {
         init_logger();
         let addr : SocketAddr = SocketAddr::from(([127, 0, 0, 1], 4720));
 
@@ -101,6 +101,7 @@ mod tests {
 
         // Test connection when connected
         let result = asiair.test_connection().await;
+        log::debug!("Test connection result: {:?}", result);
         assert!(result.is_ok(), "Expected successful connection test to ASIAir simulator");
 
         // Disconnect from the ASIAir simulator

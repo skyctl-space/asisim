@@ -9,6 +9,202 @@ use crate::rtc;
 
 use super::ASIAirSim;
 
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum ASIAirPage {
+    Preview,
+    Focus,
+    PA,
+    Stack,
+    Autosave,
+    Plan,
+    RMTP,
+}
+
+impl ASIAirPage {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ASIAirPage::Preview => "preview",
+            ASIAirPage::Focus => "focus",
+            ASIAirPage::PA => "pa",
+            ASIAirPage::Stack => "stack",
+            ASIAirPage::Autosave => "autosave",
+            ASIAirPage::Plan => "plan",
+            ASIAirPage::RMTP => "rmtp",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AnnotateState {
+    pub is_working: bool,
+    pub lapse_ms: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct SolveState {
+    pub is_working: bool,
+    pub lapse_ms: u32,
+    pub filename: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum ExposureModes {
+    Single,
+    Continuous,
+}
+
+impl ExposureModes {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ExposureModes::Single => "single",
+            ExposureModes::Continuous => "continuous",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum CaptureStatus {
+    Idle,
+    // Working,
+}
+
+impl CaptureStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            CaptureStatus::Idle => "idle",
+            // CaptureStatus::Working => "working",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CaptureState {
+    pub exposure_mode: ExposureModes,
+    pub is_working: bool,
+    pub state: CaptureStatus,
+}
+
+#[derive(Debug, Clone)]
+pub struct PaState {
+    pub is_working: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AutoGotoState {
+    pub is_working: bool,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum FrameType {
+    Light,
+    Dark,
+    Flat,
+    Bias,
+}
+
+impl FrameType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            FrameType::Light => "light",
+            FrameType::Dark => "dark",
+            FrameType::Flat => "flat",
+            FrameType::Bias => "bias",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StackState {
+    pub is_working: bool,
+    pub frame_type: FrameType,
+    pub stacked_frame: u32,
+    pub dropped_frame: u32,
+    pub total_frame: u32,
+}
+#[derive(Debug, Clone)]
+pub struct ExportImageState {
+    pub is_working: bool,
+    pub success_frame: u32,
+    pub total_frame: u32,
+    pub keep: bool,
+    pub dst_storage: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MeridFlipState {
+    pub is_working: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AutoFocusResult {
+    // Fields for AutoFocusResult
+}
+
+#[derive(Debug, Clone)]
+pub struct AutoFocuserReason {
+    pub comment: String,
+    pub code: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct AutoFocusState {
+    #[allow(dead_code)]
+    pub result: AutoFocusResult,
+    pub is_working: bool,
+    pub focuser_opened: bool,
+    pub reason: AutoFocuserReason,
+
+}
+
+#[derive(Debug, Clone)]
+pub struct FindStarState {
+    pub is_working: bool,
+    pub lapse_ms: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct AviRecordState {
+    pub is_working: bool,
+    pub lapse_sec: u32,
+    pub fps: f32,
+    pub write_file_fps: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct RtmpState {
+    pub is_working: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AutoExpState {
+    pub is_working: bool
+}
+
+#[derive(Debug, Clone)]
+pub struct RestartGuideState {
+    pub is_working: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct BatchStackState {
+    pub is_working: bool
+}
+
+#[derive(Debug, Clone)]
+pub struct DemonstrateState {
+    pub is_working: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct FormatDriveState {
+    pub is_working: bool,
+}
+
+
 #[derive(Debug, Clone)]
 pub struct ASIAirState {
     pub name: String,
@@ -21,6 +217,25 @@ pub struct ASIAirState {
 
     pub rtc: rtc::RTC,
     pub language: String,
+
+    pub page: ASIAirPage,
+    pub annotate: AnnotateState,
+    pub solve: SolveState,
+    pub capture: CaptureState,
+    pub pa: PaState,
+    pub auto_goto: AutoGotoState,
+    pub stack: StackState,
+    pub export_image: ExportImageState,
+    pub merid_flip: MeridFlipState,
+    pub auto_focus: AutoFocusState,
+    pub find_star: FindStarState,
+    pub avi_record: AviRecordState,
+    pub rtmp: RtmpState,
+    pub auto_exp: AutoExpState,
+    pub restart_guide: RestartGuideState,
+    pub batch_stack: BatchStackState,
+    pub demonstrate: DemonstrateState,
+    pub format_drive: FormatDriveState,
 }
 
 
@@ -39,6 +254,82 @@ impl ASIAirSim {
                 connect_lock: false,
                 rtc: rtc::RTC::new(),
                 language: "en".to_string(),
+
+                page: ASIAirPage::Preview,
+                annotate: AnnotateState {
+                    is_working: false,
+                    lapse_ms: 0,
+                },
+                solve: SolveState {
+                    is_working: false,
+                    lapse_ms: 0,
+                    filename: "".to_string(),
+                },
+                capture: CaptureState {
+                    exposure_mode: ExposureModes::Single,
+                    is_working: false,
+                    state: CaptureStatus::Idle,
+                },
+                pa: PaState {
+                    is_working: false,
+                },
+                auto_goto: AutoGotoState {
+                    is_working: false,
+                },
+                stack: StackState {
+                    is_working: false,
+                    frame_type: FrameType::Light,
+                    stacked_frame: 0,
+                    dropped_frame: 0,
+                    total_frame: 0,
+                },
+                export_image: ExportImageState {
+                    is_working: false,
+                    success_frame: 0,
+                    total_frame: 0,
+                    keep: false,
+                    dst_storage: "".to_string(),
+                },
+                merid_flip: MeridFlipState {
+                    is_working: false,
+                },
+                auto_focus: AutoFocusState {
+                    result: AutoFocusResult {},
+                    is_working: false,
+                    focuser_opened: false,
+                    reason: AutoFocuserReason {
+                        comment: "manual".to_string(),
+                        code: 0,
+                    },
+                },
+                find_star: FindStarState {
+                    is_working: false,
+                    lapse_ms: 0,
+                },
+                avi_record: AviRecordState {
+                    is_working: false,
+                    lapse_sec: 0,
+                    fps: 10.0,
+                    write_file_fps: 0.0,
+                },
+                rtmp: RtmpState {
+                    is_working: false,
+                },
+                auto_exp: AutoExpState {
+                    is_working: false,
+                },
+                restart_guide: RestartGuideState {
+                    is_working: false,
+                },
+                batch_stack: BatchStackState {
+                    is_working: false,
+                },
+                demonstrate: DemonstrateState {
+                    is_working: false,
+                },
+                format_drive: FormatDriveState {
+                    is_working: false,
+                },
             })),
             shutdown_tx: None,
         }

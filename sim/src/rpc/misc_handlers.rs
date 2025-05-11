@@ -24,36 +24,33 @@ pub fn test_connection(_params: &Option<Value>, _state: Arc<Mutex<ASIAirState>>)
 
 pub fn pi_set_time(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (Value, u8) {
     let mut state = state.lock().unwrap();
+    
+    if let Some(value) = params {
+        log::info!("pi_set_time: {:?}", value);
 
-    // Check if params is None or not
-    if params.is_none() {
-        return (json!({ "error": "params is None" }), 1);
+        let year = value[0]["year"].as_i64().unwrap_or(0) as i32;
+        let month = value[0]["mon"].as_i64().unwrap_or(0) as u32;
+        let day = value[0]["day"].as_i64().unwrap_or(0) as u32;
+        let hour = value[0]["hour"].as_i64().unwrap_or(0) as u32;
+        let minute = value[0]["min"].as_i64().unwrap_or(0) as u32;
+        let second = value[0]["sec"].as_i64().unwrap_or(0) as u32;
+        let time_zone = value[0]["time_zone"].as_str().unwrap_or("UTC");
+
+        state.rtc.set_time(
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            time_zone,
+        ).unwrap();
+
+
+        (json!(0), 0)
+    } else {
+        (json!({ "error": "params is None" }), 1)
     }
-
-    let params = params.as_ref().unwrap();
-    let params = params.as_str().unwrap_or("[]");
-    let params = serde_json::from_str::<Vec<Value>>(params).unwrap_or_else(|_| vec![]);
-
-    let year = params[0]["year"].as_i64().unwrap_or(0) as i32;
-    let month = params[0]["mon"].as_i64().unwrap_or(0) as u32;
-    let day = params[0]["day"].as_i64().unwrap_or(0) as u32;
-    let hour = params[0]["hour"].as_i64().unwrap_or(0) as u32;
-    let minute = params[0]["min"].as_i64().unwrap_or(0) as u32;
-    let second = params[0]["sec"].as_i64().unwrap_or(0) as u32;
-    let time_zone = params[0]["time_zone"].as_str().unwrap_or("UTC");
-
-    state.rtc.set_time(
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
-        time_zone,
-    ).unwrap();
-
-
-    (json!(0), 0)
 }
 
 pub fn set_setting(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (Value, u8) {
