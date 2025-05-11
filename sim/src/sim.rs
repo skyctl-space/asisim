@@ -437,7 +437,8 @@ impl ASIAirSim {
                                                                         result: result,
                                                                     };
 
-                                                                    let json = serde_json::to_string(&response).unwrap();
+                                                                    let mut json = serde_json::to_string(&response).unwrap();
+                                                                    json.push_str("\r\n");
                                                                     stream.write_all(json.as_bytes()).await.unwrap();
                                                                     log::debug!("Sent TCP response to {}: {}", addr, json);
                                                                 }

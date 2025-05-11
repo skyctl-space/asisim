@@ -152,7 +152,8 @@ impl ASIAir {
 
         // Read loop
         tokio::spawn(async move {
-            
+            let mut buffer = Vec::new();
+
             let mut buf = [0u8; 2048];
             loop {
                 tokio::select! {
@@ -167,109 +168,118 @@ impl ASIAir {
                                 break
                             },
                             Ok(len) => {
-                                if let Ok(response) = serde_json::from_slice::<Value>(&buf[..len]) {
-                                    // Check if we have an event or a jsonrpc response
-                                    if let Some(event) = response.get("Event") {
-                                        match event.as_str() {
-                                            Some("Temperature") => {
-                                                if let Some(temp) = response.get("value").and_then(|r| r.as_f64()) {
-                                                    let _ = camera_temperature_tx.send(temp as f32);
-                                                }
-                                            },
-                                            Some("CoolerPower") => {
-                                                if let Some(power) = response.get("value").and_then(|r| r.as_i64()) {
-                                                    let _ = cooler_power_tx.send(power as i32);
-                                                }
-                                            },
-                                            Some("CameraControlChange") => {
-                                                let _ = camera_control_change_tx.send(());
-                                            },
-                                            Some("Exposure") => {
-                                                if let Some(exp_us) = response.get("exp_us").and_then(|r| r.as_u64()) {
-                                                    if let Some(gain) = response.get("gain").and_then(|r| r.as_u64()) {
-                                                        if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
+                                buffer.extend_from_slice(&buf[..len]);
+
+                                // Use a sliding window to find complete frames
+                                // ASIAir frames are terminated by \r\n
+                                while let Some(pos) = buffer.windows(2).position(|window| window == b"\r\n") {
+                                    let frame = buffer.drain(..pos + 2).collect::<Vec<_>>();
+                                    if let Ok(response) = serde_json::from_slice::<Value>(&frame) {
+                                        // Process the response as before
+                                        if let Some(event) = response.get("Event") {
+                                            match event.as_str() {
+                                                Some("Temperature") => {
+                                                    if let Some(temp) = response.get("value").and_then(|r| r.as_f64()) {
+                                                        let _ = camera_temperature_tx.send(temp as f32);
+                                                    }
+                                                },
+                                                Some("CoolerPower") => {
+                                                    if let Some(power) = response.get("value").and_then(|r| r.as_i64()) {
+                                                        let _ = cooler_power_tx.send(power as i32);
+                                                    }
+                                                },
+                                                Some("CameraControlChange") => {
+                                                    let _ = camera_control_change_tx.send(());
+                                                },
+                                                Some("Exposure") => {
+                                                    if let Some(exp_us) = response.get("exp_us").and_then(|r| r.as_u64()) {
+                                                        if let Some(gain) = response.get("gain").and_then(|r| r.as_u64()) {
+                                                            if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
+                                                                if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
+                                                                    if let Ok(state) = EventState::from_str(state) {
+                                                                        if let Ok(page) = ASIAirPage::from_str(page) {
+                                                                            let _ = exposure_change_tx.send(ExposureChangeEvent {
+                                                                                page: page,
+                                                                                state: state,
+                                                                                exp_us: exp_us,
+                                                                                gain: gain as u32,
+                                                                            });
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                Some("PiStatus") => {
+                                                    if let Some(is_overtemp) = response.get("is_overtemp").and_then(|r| r.as_bool()) {
+                                                        if let Some(temp) = response.get("temp").and_then(|r| r.as_f64()) {
+                                                            if let Some(is_undervolt) = response.get("is_undervolt").and_then(|r| r.as_bool()) {
+                                                                if let Some(is_over_current) = response.get("is_over_current").and_then(|r| r.as_bool()) {
+                                                                    let _ = pi_status_tx.send(PiStatusEvent {
+                                                                        is_overtemp: is_overtemp,
+                                                                        temp: temp as f32,
+                                                                        is_undervolt: is_undervolt,
+                                                                        is_over_current: is_over_current,
+                                                                    });
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                Some("Annotate") => {
+                                                    if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
+                                                        if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
                                                             if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
                                                                 if let Ok(state) = EventState::from_str(state) {
                                                                     if let Ok(page) = ASIAirPage::from_str(page) {
-                                                                        let _ = exposure_change_tx.send(ExposureChangeEvent {
+                                                                        let _ = annotate_tx.send(AnnotateEvent {
                                                                             page: page,
+                                                                            tag: tag.to_string(),
                                                                             state: state,
-                                                                            exp_us: exp_us,
-                                                                            gain: gain as u32,
                                                                         });
                                                                     }
                                                                 }
                                                             }
                                                         }
                                                     }
-                                                }
-                                            },
-                                            Some("PiStatus") => {
-                                                if let Some(is_overtemp) = response.get("is_overtemp").and_then(|r| r.as_bool()) {
-                                                    if let Some(temp) = response.get("temp").and_then(|r| r.as_f64()) {
-                                                        if let Some(is_undervolt) = response.get("is_undervolt").and_then(|r| r.as_bool()) {
-                                                            if let Some(is_over_current) = response.get("is_over_current").and_then(|r| r.as_bool()) {
-                                                                let _ = pi_status_tx.send(PiStatusEvent {
-                                                                    is_overtemp: is_overtemp,
-                                                                    temp: temp as f32,
-                                                                    is_undervolt: is_undervolt,
-                                                                    is_over_current: is_over_current,
-                                                                });
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            Some("Annotate") => {
-                                                if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
-                                                    if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
-                                                        if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
-                                                            if let Ok(state) = EventState::from_str(state) {
-                                                                if let Ok(page) = ASIAirPage::from_str(page) {
-                                                                    let _ = annotate_tx.send(AnnotateEvent {
-                                                                        page: page,
-                                                                        tag: tag.to_string(),
-                                                                        state: state,
-                                                                    });
+                                                },
+                                                Some("PlateSolve") => {
+                                                    if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
+                                                        if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
+                                                            if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
+                                                                if let Ok(state) = EventState::from_str(state) {
+                                                                    if let Ok(page) = ASIAirPage::from_str(page) {
+                                                                        let _ = plate_solve_tx.send(PlateSolveEvent {
+                                                                            page: page,
+                                                                            tag: tag.to_string(),
+                                                                            state: state,
+                                                                        });
+                                                                    }
                                                                 }
                                                             }
                                                         }
                                                     }
-                                                }
-                                            },
-                                            Some("PlateSolve") => {
-                                                if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
-                                                    if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
-                                                        if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
-                                                            if let Ok(state) = EventState::from_str(state) {
-                                                                if let Ok(page) = ASIAirPage::from_str(page) {
-                                                                    let _ = plate_solve_tx.send(PlateSolveEvent {
-                                                                        page: page,
-                                                                        tag: tag.to_string(),
-                                                                        state: state,
-                                                                    });
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            _ => {}
-                                        }
-                                    } else if response.get("jsonrpc").is_some() {
-                                        if let Some(id) = response.get("id").and_then(|id| id.as_u64()) {
-                                            if let Some(tx) = pending_responses_reader
-                                                .lock()
-                                                .unwrap()
-                                                .remove(&(id as u32))
-                                            {
-                                                let _ = tx.send(Ok(response["result"].clone()));
-                                            } else {
-                                                log::warn!("No pending response for ID {}: ${:?}", id, response);
+                                                },
+                                                _ => {}
                                             }
+                                        } else if response.get("jsonrpc").is_some() {
+                                            if let Some(id) = response.get("id").and_then(|id| id.as_u64()) {
+                                                if let Some(tx) = pending_responses_reader
+                                                    .lock()
+                                                    .unwrap()
+                                                    .remove(&(id as u32))
+                                                {
+                                                    let _ = tx.send(Ok(response["result"].clone()));
+                                                } else {
+                                                    log::warn!("No pending response for ID {}: {:?}", id, response);
+                                                }
+                                            }
+                                        } else {
+                                            log::warn!("Unexpected response: {:?}", response);
                                         }
                                     } else {
-                                        log::warn!("Unexpected response: {:?}", response);
+                                        log::warn!("Failed to parse JSON from frame: {:?}", frame);
                                     }
                                 }
                             }
@@ -475,6 +485,37 @@ impl ASIAir {
                 .map(|_| ())
                 .map_err(|e| {
                     log::debug!("Connection test failed: {}", e);
+                    e
+                })
+        }
+    }
+
+    pub async fn initialize(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if !self.should_be_connected.load(Ordering::SeqCst) {
+            return Err("Not connected".into());
+        }
+
+        // Send a sequence of commands to get to a known state
+        tokio::join!(
+            self.set_page(ASIAirPage::Preview)
+        ).into_iter().collect::<Result<Vec<_>, _>>()?;
+
+        Ok(())
+    }
+
+    pub async fn set_page(&self, page: ASIAirPage) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let response = self.rpc_request("set_page", Some(json!(vec![page.as_str()]))).await;
+        if let Ok(value) = response {
+            if value.as_i64() == Some(0) {
+                Ok(())
+            } else {
+                return Err("unexpected response".into());
+            }
+        } else {
+            response
+                .map(|_| ())
+                .map_err(|e| {
+                    log::debug!("set_page failed: {}", e);
                     e
                 })
         }
