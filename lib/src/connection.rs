@@ -496,11 +496,9 @@ impl ASIAir {
         }
 
         // Send a sequence of commands to get to a known state
-        tokio::join!(
-            self.set_page(ASIAirPage::Preview)
-        ).into_iter().collect::<Result<Vec<_>, _>>()?;
+        let result = self.set_page(ASIAirPage::Preview).await?;
 
-        Ok(())
+        Ok(result)
     }
 
     pub async fn set_page(&self, page: ASIAirPage) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
