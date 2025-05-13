@@ -28,22 +28,25 @@ pub fn pi_set_time(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (V
     if let Some(value) = params {
         log::info!("pi_set_time: {:?}", value);
 
-        let year = value[0]["year"].as_i64().unwrap_or(0) as i32;
-        let month = value[0]["mon"].as_i64().unwrap_or(0) as u32;
-        let day = value[0]["day"].as_i64().unwrap_or(0) as u32;
-        let hour = value[0]["hour"].as_i64().unwrap_or(0) as u32;
-        let minute = value[0]["min"].as_i64().unwrap_or(0) as u32;
-        let second = value[0]["sec"].as_i64().unwrap_or(0) as u32;
+        let year = value[0]["year"].as_i64().unwrap_or(0);
+        let month = value[0]["mon"].as_u64().unwrap_or(0);
+        let day = value[0]["day"].as_u64().unwrap_or(0);
+        let hour = value[0]["hour"].as_u64().unwrap_or(0);
+        let minute = value[0]["min"].as_u64().unwrap_or(0);
+        let second = value[0]["sec"].as_u64().unwrap_or(0);
         let time_zone = value[0]["time_zone"].as_str().unwrap_or("UTC");
 
+        log::info!("Setting time: {}-{}-{} {}:{}:{}", year, month, day, hour, minute, second);
+        log::info!("Setting timezone: {}", time_zone);
+
         state.rtc.set_time(
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second,
-            time_zone,
+            year.try_into().unwrap(),
+            month.try_into().unwrap(),
+            day.try_into().unwrap(),
+            hour.try_into().unwrap(),
+            minute.try_into().unwrap(),
+            second.try_into().unwrap(),
+            time_zone.try_into().unwrap(),
         ).unwrap();
 
 

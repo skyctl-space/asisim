@@ -5,7 +5,7 @@ use tokio::time::Duration;
 use tokio::sync::{mpsc, oneshot, watch};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::str::FromStr;
 
@@ -135,7 +135,7 @@ pub struct PlateSolveEvent {
 #[derive(Debug, Clone)]
 pub struct ASIAir {
     // The address of the ASIAir device
-    addr: SocketAddr,
+    pub addr: Ipv4Addr,
     // Time waiting for command response
     cmd_timeout: Duration,
 
@@ -148,7 +148,7 @@ pub struct ASIAir {
     // Channel for reconnection attempts
     reconnect_tx: Option<mpsc::Sender<()>>,
     // Tracks if we should attempt to connect
-    should_be_connected: Arc<AtomicBool>,
+    pub should_be_connected: Arc<AtomicBool>,
 
     // Tracks if the ASIAir is connected
     pub connected: Arc<AtomicBool>,

@@ -5,7 +5,7 @@ mod common;
 mod tests {
     use super::common::init_logger;
 
-    use std::net::SocketAddr;
+    use std::net::Ipv4Addr;
     use asiair::ASIAir;
     use asisim::ASIAirSim;
     use std::time::Duration;
@@ -16,7 +16,7 @@ mod tests {
     #[tokio::test]
     async fn test_asiair_connection() {
         init_logger();
-        let addr : SocketAddr = SocketAddr::from(([127, 0, 0, 1], 4720));
+        let addr : Ipv4Addr = Ipv4Addr::from([127, 0, 0, 1]));
 
         // Create a new ASIAir instance
         let mut asiair = ASIAir::new(addr);

@@ -8,6 +8,7 @@ use tokio::time::timeout;
 use rand::Rng;
 use asisim::ASIAirSim;
 use serial_test::serial;
+use env_logger;
 
 async fn setup_simulator() -> ASIAirSim {
     let mut asiair_sim = ASIAirSim::new();
@@ -88,8 +89,8 @@ async fn test_pi_set_time_request(stream: &mut TcpStream) {
     // Send a test_connection request
     let request = json!({
         "id": random_id,
-        "method": "pi_set_time",
-        "params": "[{ \"time_zone\" : \"America\\/Costa_Rica\", \"hour\" : 18, \"min\" : 44, \"sec\" : 31, \"day\" : 6, \"year\" : 2025, \"mon\" : 5 } ]",
+        "method": "pi_set_time", 
+        "params": [{ "time_zone" : "America/Costa_Rica", "hour" : 18, "min" : 44, "sec" : 31, "day" : 6, "year" : 2025, "mon" : 5 } ]
     });
     stream.write_all(request.to_string().as_bytes()).await.unwrap();
 
@@ -134,6 +135,7 @@ async fn test_set_setting_request(stream: &mut TcpStream) {
 #[tokio::test]
 #[serial]
 async fn test_asiair_protocol() {
+    env_logger::init();
     let _simulator = setup_simulator().await;
 
     // Connect to the TCP server

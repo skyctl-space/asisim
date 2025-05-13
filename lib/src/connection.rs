@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{SocketAddrV4, Ipv4Addr};
 use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
 use std::str::FromStr;
@@ -19,7 +19,7 @@ use super::AnnotateEvent;
 use super::PlateSolveEvent;
 
 impl ASIAir {
-    pub fn new(addr: SocketAddr) -> Self {
+    pub fn new(addr: Ipv4Addr) -> Self {
         let (connection_state_tx, _) = watch::channel(false);
         let (camera_temperature_tx, _) = watch::channel(0.0);
         let (cooler_power_tx, _) = watch::channel(0);
@@ -68,7 +68,7 @@ impl ASIAir {
         tokio::spawn(async move {
             while reconnect_rx.recv().await.is_some() && this.should_be_connected.load(Ordering::SeqCst) {
                 this.reconnect().await.unwrap_or_else(|e| {
-                    log::error!("Reconnection failed: {}", e);
+                    log::info!("Reconnection failed: {}", e);
                 });
             }
         });
@@ -87,7 +87,8 @@ impl ASIAir {
     }
 
     async fn try_connect(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let stream = TcpStream::connect(self.addr.clone()).await?;
+        let socket = SocketAddrV4::new(self.addr.clone(), 4720);
+        let stream = TcpStream::connect(socket).await?;
         let (mut reader, mut writer) = tokio::io::split(stream);
 
         let (tx, mut rx) = mpsc::channel::<ASIAirCommand>(32);
@@ -382,7 +383,7 @@ impl ASIAir {
             }
         }
 
-        Err("Aborting reconnections because should not longer be connected".into())
+        Err("Aborting reconnections because connection canceled".into())
     }
 
     // Cleanup function to terminate the previous loops and clear pending responses
