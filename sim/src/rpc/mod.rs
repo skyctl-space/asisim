@@ -1,9 +1,9 @@
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 
-pub mod protocol;
-mod misc_handlers;
 mod app_handlers;
+mod misc_handlers;
+pub mod protocol;
 
 use super::ASIAirState;
 
@@ -23,7 +23,6 @@ pub fn asiair_tcp_handler(
     params: &Option<Value>, // Currently unused, consider removing if not needed
     state: Arc<Mutex<ASIAirState>>, // Currently unused, consider removing if not needed
 ) -> (Value, u8) {
-
     match method {
         "test_connection" => misc_handlers::test_connection(params, state),
         "pi_set_time" => misc_handlers::pi_set_time(params, state),

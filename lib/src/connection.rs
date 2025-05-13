@@ -1,21 +1,21 @@
-use tokio::net::TcpStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, oneshot, watch};
-use std::sync::atomic::{AtomicU32, AtomicBool, Ordering};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::net::{SocketAddrV4, Ipv4Addr};
-use std::sync::{Arc, Mutex};
-use tokio::time::Duration;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::time::Duration;
 
 use super::ASIAir;
 use super::ASIAirCommand;
 use super::ASIAirPage;
+use super::AnnotateEvent;
 use super::EventState;
 use super::ExposureChangeEvent;
 use super::PiStatusEvent;
-use super::AnnotateEvent;
 use super::PlateSolveEvent;
 
 impl ASIAir {
@@ -66,7 +66,9 @@ impl ASIAir {
         // Start a background task to handle reconnections
         let mut this = self.clone();
         tokio::spawn(async move {
-            while reconnect_rx.recv().await.is_some() && this.should_be_connected.load(Ordering::SeqCst) {
+            while reconnect_rx.recv().await.is_some()
+                && this.should_be_connected.load(Ordering::SeqCst)
+            {
                 this.reconnect().await.unwrap_or_else(|e| {
                     log::info!("Reconnection failed: {}", e);
                 });
@@ -87,7 +89,7 @@ impl ASIAir {
     }
 
     async fn try_connect(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let socket = SocketAddrV4::new(self.addr.clone(), 4720);
+        let socket = SocketAddrV4::new(self.addr.clone(), 4700);
         let stream = TcpStream::connect(socket).await?;
         let (mut reader, mut writer) = tokio::io::split(stream);
 
@@ -96,10 +98,10 @@ impl ASIAir {
 
         let (shutdown_tx, shutdown_rx) = watch::channel(());
         self.shutdown_tx = Some(shutdown_tx);
-           
+
         let pending_responses_writer = Arc::clone(&self.pending_responses);
         let pending_responses_reader = Arc::clone(&self.pending_responses);
-    
+
         let mut shutdown_reader_rx = shutdown_rx.clone();
         let mut shutdown_writer_rx = shutdown_rx.clone();
         let mut shutdown_watchdog_rx = shutdown_rx.clone();
@@ -109,7 +111,7 @@ impl ASIAir {
 
         self.connected.store(true, Ordering::SeqCst);
         let _ = self.connection_state_tx.send(true); // Notify that we are connected
-        
+
         let camera_temperature_tx = self.camera_temperature_tx.clone();
         let cooler_power_tx = self.cooler_power_tx.clone();
         let camera_control_change_tx = self.camera_control_change_tx.clone();
@@ -149,7 +151,6 @@ impl ASIAir {
                 }
             }
         });
-
 
         // Read loop
         tokio::spawn(async move {
@@ -297,8 +298,8 @@ impl ASIAir {
                 }
             }
         });
-    
-        // Write loop 
+
+        // Write loop
         tokio::spawn(async move {
             let id_counter = AtomicU32::new(1);
 
@@ -356,7 +357,7 @@ impl ASIAir {
                 }
             }
         });
-    
+
         Ok(())
     }
 
@@ -392,7 +393,7 @@ impl ASIAir {
 
         // Kill existing read and write loops
         if let Some(shutdown_tx) = &self.shutdown_tx {
-            let _ = shutdown_tx.send(());  // Notify the tasks to shut down
+            let _ = shutdown_tx.send(()); // Notify the tasks to shut down
         }
 
         // Clear pending responses
@@ -460,12 +461,8 @@ impl ASIAir {
 
             // Wait for the response with a timeout
             match tokio::time::timeout(self.cmd_timeout, response_rx).await {
-                Ok(Ok(response)) => {
-                    response
-                }
-                Ok(Err(_)) | Err(_) => {
-                    Err("Failed to get response".into())
-                }
+                Ok(Ok(response)) => response,
+                Ok(Err(_)) | Err(_) => Err("Failed to get response".into()),
             }
         } else {
             Err("Not connected".into())
@@ -482,12 +479,10 @@ impl ASIAir {
                 return Err("Connection test failed: unexpected response".into());
             }
         } else {
-            response
-                .map(|_| ())
-                .map_err(|e| {
-                    log::debug!("Connection test failed: {}", e);
-                    e
-                })
+            response.map(|_| ()).map_err(|e| {
+                log::debug!("Connection test failed: {}", e);
+                e
+            })
         }
     }
 
@@ -502,8 +497,13 @@ impl ASIAir {
         Ok(result)
     }
 
-    pub async fn set_page(&self, page: ASIAirPage) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let response = self.rpc_request("set_page", Some(json!(vec![page.as_str()]))).await;
+    pub async fn set_page(
+        &self,
+        page: ASIAirPage,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let response = self
+            .rpc_request("set_page", Some(json!(vec![page.as_str()])))
+            .await;
         if let Ok(value) = response {
             if value.as_i64() == Some(0) {
                 Ok(())
@@ -511,12 +511,10 @@ impl ASIAir {
                 return Err("unexpected response".into());
             }
         } else {
-            response
-                .map(|_| ())
-                .map_err(|e| {
-                    log::debug!("set_page failed: {}", e);
-                    e
-                })
+            response.map(|_| ()).map_err(|e| {
+                log::debug!("set_page failed: {}", e);
+                e
+            })
         }
     }
 }

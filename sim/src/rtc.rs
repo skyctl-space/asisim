@@ -1,4 +1,4 @@
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, TimeZone, Offset};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, Offset, TimeZone};
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -33,13 +33,12 @@ impl RTC {
             Err(_) => return Err(format!("Invalid timezone: {}", time_zone)),
         };
 
-        let naive_date = NaiveDate::from_ymd_opt(year, mon, day)
-            .ok_or("Invalid date")?;
-        let naive_time = NaiveTime::from_hms_opt(hour, min, sec)
-            .ok_or("Invalid time")?;
+        let naive_date = NaiveDate::from_ymd_opt(year, mon, day).ok_or("Invalid date")?;
+        let naive_time = NaiveTime::from_hms_opt(hour, min, sec).ok_or("Invalid time")?;
 
         let naive = naive_date.and_time(naive_time);
-        let datetime = tz.from_local_datetime(&naive)
+        let datetime = tz
+            .from_local_datetime(&naive)
             .single()
             .ok_or("Ambiguous or nonexistent local time")?;
 
@@ -56,7 +55,6 @@ impl RTC {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,7 +66,8 @@ mod tests {
     fn test_set_and_get_time_basic() {
         let mut rtc = RTC::new();
 
-        rtc.set_time(2025, 5, 6, 18, 44, 31, "America/Costa_Rica").unwrap();
+        rtc.set_time(2025, 5, 6, 18, 44, 31, "America/Costa_Rica")
+            .unwrap();
 
         thread::sleep(Duration::from_millis(1000));
 

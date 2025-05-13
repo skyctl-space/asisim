@@ -1,15 +1,15 @@
-mod rtc;
 mod rpc;
+mod rtc;
 mod sim;
 
+use sim::ASIAirState;
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
-use sim::ASIAirState;
 
 #[derive(Debug, Clone)]
 pub struct ASIAirSim {
     // ASIAir simulation state
     state: Arc<Mutex<ASIAirState>>,
-     // Channel for shutdown signal
-     shutdown_tx: Option<watch::Sender<()>>,
+    // Channel for shutdown signal
+    shutdown_tx: Option<watch::Sender<()>>,
 }

@@ -1,9 +1,9 @@
 use chrono::DateTime;
-use chrono::Timelike;
 use chrono::Datelike;
+use chrono::Timelike;
 use chrono_tz::Tz;
-use serde_json::json;
 use serde::Serialize;
+use serde_json::json;
 
 use super::ASIAir;
 use super::ASIAirLanguage;
@@ -28,12 +28,15 @@ impl ASIAirLanguage {
 }
 
 impl ASIAir {
-    pub async fn set_time(&mut self, date_time: DateTime<Tz>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn set_time(
+        &mut self,
+        date_time: DateTime<Tz>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let method = "pi_set_time";
-        let response = self.rpc_request(method,
-         Some(
-            json!(vec![
-                TimeParams {
+        let response = self
+            .rpc_request(
+                method,
+                Some(json!(vec![TimeParams {
                     time_zone: date_time.timezone().name().to_string(),
                     hour: date_time.hour(),
                     min: date_time.minute(),
@@ -41,8 +44,9 @@ impl ASIAir {
                     day: date_time.day(),
                     year: date_time.year(),
                     mon: date_time.month(),
-                }])
-        )).await;
+                }])),
+            )
+            .await;
         if let Ok(value) = response {
             if value.as_i64() == Some(0) {
                 Ok(())
@@ -50,19 +54,21 @@ impl ASIAir {
                 return Err("unexpected response".into());
             }
         } else {
-            response
-                .map(|_| ())
-                .map_err(|e| {
-                    log::debug!("{} failed: {}", method, e);
-                    e
-                })
+            response.map(|_| ()).map_err(|e| {
+                log::debug!("{} failed: {}", method, e);
+                e
+            })
         }
     }
 
-
-    pub async fn set_language(&mut self, lang: ASIAirLanguage) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn set_language(
+        &mut self,
+        lang: ASIAirLanguage,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let method = "set_setting";
-        let response = self.rpc_request(method, Some(json!({ "lang": lang.as_str() }))).await;
+        let response = self
+            .rpc_request(method, Some(json!({ "lang": lang.as_str() })))
+            .await;
         if let Ok(value) = response {
             if value.as_i64() == Some(0) {
                 Ok(())
@@ -70,14 +76,10 @@ impl ASIAir {
                 return Err("unexpected response".into());
             }
         } else {
-            response
-                .map(|_| ())
-                .map_err(|e| {
-                    log::debug!("{} failed: {}", method, e);
-                    e
-                })
+            response.map(|_| ()).map_err(|e| {
+                log::debug!("{} failed: {}", method, e);
+                e
+            })
         }
     }
-
-    
 }

@@ -1,13 +1,13 @@
 mod connection;
 mod settings;
 
-use tokio::time::Duration;
-use tokio::sync::{mpsc, oneshot, watch};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
-use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::time::Duration;
 
 type Responder<T> = oneshot::Sender<Result<T, Box<dyn std::error::Error + Send + Sync>>>;
 
@@ -26,12 +26,14 @@ enum ASIAirCommand {
 
 #[derive(Debug, Clone, Default)]
 pub enum ASIAirLanguage {
-    #[default] English,
+    #[default]
+    English,
 }
 
 #[derive(Debug, Clone, Default)]
 pub enum ASIAirPage {
-    #[default] Preview,
+    #[default]
+    Preview,
     Focus,
     PA,
     Stack,
@@ -73,9 +75,10 @@ impl FromStr for ASIAirPage {
 
 #[derive(Debug, Clone, Default)]
 pub enum EventState {
-    #[default] Start,
+    #[default]
+    Start,
     Downloading,
-    Complete
+    Complete,
 }
 
 impl EventState {
@@ -163,6 +166,4 @@ pub struct ASIAir {
     pub pi_status_tx: watch::Sender<PiStatusEvent>,
     pub annotate_tx: watch::Sender<AnnotateEvent>,
     pub plate_solve_tx: watch::Sender<PlateSolveEvent>,
-
 }
-

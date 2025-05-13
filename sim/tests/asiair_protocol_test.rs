@@ -1,14 +1,14 @@
-use tokio::net::UdpSocket;
-use tokio::net::TcpStream;
-use tokio::io::AsyncWriteExt;
-use tokio::io::AsyncReadExt;
-use serde_json::{json, Value};
-use std::time::Duration;
-use tokio::time::timeout;
-use rand::Rng;
 use asisim::ASIAirSim;
-use serial_test::serial;
 use env_logger;
+use rand::Rng;
+use serde_json::{json, Value};
+use serial_test::serial;
+use std::time::Duration;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+use tokio::net::UdpSocket;
+use tokio::time::timeout;
 
 async fn setup_simulator() -> ASIAirSim {
     let mut asiair_sim = ASIAirSim::new();
@@ -67,11 +67,17 @@ async fn test_tcp_test_connection_request(stream: &mut TcpStream) {
         "method": "test_connection",
         "params": null,
     });
-    stream.write_all(request.to_string().as_bytes()).await.unwrap();
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
 
     // Receive the response
     let mut buf = [0u8; 2048];
-    let len = timeout(Duration::from_secs(2), stream.read(&mut buf)).await.unwrap().unwrap();
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
     let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
 
     // Verify the response
@@ -89,14 +95,20 @@ async fn test_pi_set_time_request(stream: &mut TcpStream) {
     // Send a test_connection request
     let request = json!({
         "id": random_id,
-        "method": "pi_set_time", 
+        "method": "pi_set_time",
         "params": [{ "time_zone" : "America/Costa_Rica", "hour" : 18, "min" : 44, "sec" : 31, "day" : 6, "year" : 2025, "mon" : 5 } ]
     });
-    stream.write_all(request.to_string().as_bytes()).await.unwrap();
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
 
     // Receive the response
     let mut buf = [0u8; 2048];
-    let len = timeout(Duration::from_secs(2), stream.read(&mut buf)).await.unwrap().unwrap();
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
 
     let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
 
@@ -117,11 +129,17 @@ async fn test_set_setting_request(stream: &mut TcpStream) {
         "method": "set_setting",
         "params": "{ \"lang\" : \"en\" }",
     });
-    stream.write_all(request.to_string().as_bytes()).await.unwrap();
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
 
     // Receive the response
     let mut buf = [0u8; 2048];
-    let len = timeout(Duration::from_secs(2), stream.read(&mut buf)).await.unwrap().unwrap();
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
 
     let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
 
@@ -139,7 +157,7 @@ async fn test_asiair_protocol() {
     let _simulator = setup_simulator().await;
 
     // Connect to the TCP server
-    let mut stream = TcpStream::connect("127.0.0.1:4720").await.unwrap();
+    let mut stream = TcpStream::connect("127.0.0.1:4700").await.unwrap();
 
     test_scan_air_request().await;
     test_tcp_test_connection_request(&mut stream).await;

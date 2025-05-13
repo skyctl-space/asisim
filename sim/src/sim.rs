@@ -1,14 +1,13 @@
-use std::sync::{Arc, Mutex};
-use tokio::sync::watch;
-use tokio::net::{TcpListener, UdpSocket};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use crate::rpc::{asiair_udp_handler, asiair_tcp_handler};
 use crate::rpc::protocol::{ASIAirRequest, ASIAirResponse};
-use local_ip_address::local_ip;
+use crate::rpc::{asiair_tcp_handler, asiair_udp_handler};
 use crate::rtc;
+use local_ip_address::local_ip;
+use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, UdpSocket};
+use tokio::sync::watch;
 
 use super::ASIAirSim;
-
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -157,7 +156,6 @@ pub struct AutoFocusState {
     pub is_working: bool,
     pub focuser_opened: bool,
     pub reason: AutoFocuserReason,
-
 }
 
 #[derive(Debug, Clone)]
@@ -181,7 +179,7 @@ pub struct RtmpState {
 
 #[derive(Debug, Clone)]
 pub struct AutoExpState {
-    pub is_working: bool
+    pub is_working: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -191,7 +189,7 @@ pub struct RestartGuideState {
 
 #[derive(Debug, Clone)]
 pub struct BatchStackState {
-    pub is_working: bool
+    pub is_working: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -203,7 +201,6 @@ pub struct DemonstrateState {
 pub struct FormatDriveState {
     pub is_working: bool,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct ASIAirState {
@@ -238,7 +235,6 @@ pub struct ASIAirState {
     pub format_drive: FormatDriveState,
 }
 
-
 impl ASIAirSim {
     pub fn new() -> Self {
         let local_ip = local_ip().unwrap_or_else(|_| "0.0.0.0".parse().unwrap());
@@ -270,12 +266,8 @@ impl ASIAirSim {
                     is_working: false,
                     state: CaptureStatus::Idle,
                 },
-                pa: PaState {
-                    is_working: false,
-                },
-                auto_goto: AutoGotoState {
-                    is_working: false,
-                },
+                pa: PaState { is_working: false },
+                auto_goto: AutoGotoState { is_working: false },
                 stack: StackState {
                     is_working: false,
                     frame_type: FrameType::Light,
@@ -290,9 +282,7 @@ impl ASIAirSim {
                     keep: false,
                     dst_storage: "".to_string(),
                 },
-                merid_flip: MeridFlipState {
-                    is_working: false,
-                },
+                merid_flip: MeridFlipState { is_working: false },
                 auto_focus: AutoFocusState {
                     result: AutoFocusResult {},
                     is_working: false,
@@ -312,24 +302,12 @@ impl ASIAirSim {
                     fps: 10.0,
                     write_file_fps: 0.0,
                 },
-                rtmp: RtmpState {
-                    is_working: false,
-                },
-                auto_exp: AutoExpState {
-                    is_working: false,
-                },
-                restart_guide: RestartGuideState {
-                    is_working: false,
-                },
-                batch_stack: BatchStackState {
-                    is_working: false,
-                },
-                demonstrate: DemonstrateState {
-                    is_working: false,
-                },
-                format_drive: FormatDriveState {
-                    is_working: false,
-                },
+                rtmp: RtmpState { is_working: false },
+                auto_exp: AutoExpState { is_working: false },
+                restart_guide: RestartGuideState { is_working: false },
+                batch_stack: BatchStackState { is_working: false },
+                demonstrate: DemonstrateState { is_working: false },
+                format_drive: FormatDriveState { is_working: false },
             })),
             shutdown_tx: None,
         }
@@ -337,8 +315,8 @@ impl ASIAirSim {
 
     pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let udp_socket = UdpSocket::bind("0.0.0.0:4720").await?;
-        let tcp_listener = TcpListener::bind("0.0.0.0:4720").await?;
-        println!("ASIAIR Simulator listening on 0.0.0.0:4720 for both UDP and TCP");
+        let tcp_listener = TcpListener::bind("0.0.0.0:4700").await?;
+        println!("ASIAIR Simulator listening on 0.0.0.0");
 
         let udp_state = self.state.clone();
         let tcp_state = self.state.clone();
@@ -356,7 +334,7 @@ impl ASIAirSim {
                     _ = udp_shutdown_rx.changed() => {
                         break;
                     }
-                    read_result = udp_socket.recv_from(&mut buf) => { 
+                    read_result = udp_socket.recv_from(&mut buf) => {
                         match read_result {
                             Ok((len, addr)) => {
                                 let data = &buf[..len];
