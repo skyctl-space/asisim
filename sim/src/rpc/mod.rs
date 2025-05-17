@@ -27,7 +27,31 @@ pub fn asiair_tcp_handler(
         "test_connection" => misc_handlers::test_connection(params, state),
         "pi_set_time" => misc_handlers::pi_set_time(params, state),
         "set_setting" => misc_handlers::set_setting(params, state),
+        "get_setting" => misc_handlers::get_setting(params, state),
         "get_app_state" => app_handlers::get_app_state(params, state),
+        _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
+    }
+}
+
+pub fn asiair_tcp_4500_handler(
+    method: &str,
+    params: &Option<Value>, // Currently unused, consider removing if not needed
+    state: Arc<Mutex<ASIAirState>>, // Currently unused, consider removing if not needed
+) -> (Value, u8) {
+    match method {
+        "test_connection" => misc_handlers::test_connection(params, state),
+        _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
+    }
+}
+
+pub fn asiair_tcp_4800_handler(
+    method: &str,
+    params: &Option<Value>, // Currently unused, consider removing if not needed
+    state: Arc<Mutex<ASIAirState>>, // Currently unused, consider removing if not needed
+) -> (Value, u8) {
+    match method {
+        "test_connection" => misc_handlers::test_connection(params, state),
+        "get_current_img" => misc_handlers::get_setting(params, state),
         _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
     }
 }

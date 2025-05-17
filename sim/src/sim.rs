@@ -1,5 +1,5 @@
 use crate::rpc::protocol::{ASIAirRequest, ASIAirResponse};
-use crate::rpc::{asiair_tcp_handler, asiair_udp_handler};
+use crate::rpc::{asiair_tcp_handler, asiair_udp_handler, asiair_tcp_4500_handler, asiair_tcp_4800_handler};
 use crate::rtc;
 use local_ip_address::local_ip;
 use std::sync::{Arc, Mutex};
@@ -316,16 +316,23 @@ impl ASIAirSim {
     pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let udp_socket = UdpSocket::bind("0.0.0.0:4720").await?;
         let tcp_listener = TcpListener::bind("0.0.0.0:4700").await?;
+        let tcp_listener_4500 = TcpListener::bind("0.0.0.0:4500").await?;
+        let tcp_listener_4800 = TcpListener::bind("0.0.0.0:4800").await?;
+
         println!("ASIAIR Simulator listening on 0.0.0.0");
 
         let udp_state = self.state.clone();
         let tcp_state = self.state.clone();
+        let tcp_4500_state = self.state.clone();
+        let tcp_4800_state = self.state.clone();
 
         let (shutdown_tx, shutdown_rx) = watch::channel(());
         self.shutdown_tx = Some(shutdown_tx);
 
         let mut udp_shutdown_rx = shutdown_rx.clone();
         let mut tcp_shutdown_rx = shutdown_rx.clone();
+        let mut tcp_shutdown_rx_4500 = shutdown_rx.clone();
+        let mut tcp_shutdown_rx_4800 = shutdown_rx.clone();
 
         tokio::spawn(async move {
             let mut buf = [0u8; 2048];
@@ -448,6 +455,157 @@ impl ASIAirSim {
                 }
             }
         });
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = tcp_shutdown_rx_4500.changed() => {
+                        break;
+                    }
+                    read_result = tcp_listener_4500.accept() => {
+                        match read_result {
+                            Ok((mut stream, addr)) => {
+                                log::debug!("Received TCP connection from {}", addr);
+
+                                let tcp_state = tcp_4500_state.clone();
+                                let mut per_connection_shutdown_rx = tcp_shutdown_rx_4500.clone();
+                                tokio::spawn(async move {
+                                    let mut buf = [0u8; 2048];
+                                    loop {
+                                        tokio::select! {
+                                            _ = per_connection_shutdown_rx.changed() => {
+                                                break;
+                                            }
+                                            read_result = stream.read(&mut buf) => {
+                                                match read_result {
+                                                    Ok(len) if len > 0 => {
+                                                        let data = &buf[..len];
+
+                                                        if let Ok(text) = std::str::from_utf8(data) {
+                                                            log::debug!("Received TCP 4500 from {}: {}", addr, text);
+
+                                                            match serde_json::from_str::<ASIAirRequest>(text) {
+                                                                Ok(req) => {
+                                                                    let (result, code) = asiair_tcp_4500_handler(&req.method, &req.params, tcp_state.clone());
+
+                                                                    let response = ASIAirResponse {
+                                                                        id: req.id,
+                                                                        code: code as u8,
+                                                                        jsonrpc: "2.0".to_string(),
+                                                                        timestamp: "2025-05-06T00:00:00Z".to_string(),
+                                                                        method: req.method.clone(),
+                                                                        result: result,
+                                                                    };
+
+                                                                    let mut json = serde_json::to_string(&response).unwrap();
+                                                                    json.push_str("\r\n");
+                                                                    stream.write_all(json.as_bytes()).await.unwrap();
+                                                                    log::debug!("Sent TCP response to {}: {}", addr, json);
+                                                                }
+                                                                Err(err) => {
+                                                                    eprintln!("Failed to parse TCP JSON-RPC: {}", err);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    Ok(_) => {
+                                                        log::debug!("TCP connection from {} closed", addr);
+                                                        break;
+                                                    }
+                                                    Err(err) => {
+                                                        eprintln!("Error reading from TCP stream: {}", err);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            },
+                            Err(err) => {
+                                eprintln!("Error accepting TCP connection: {}", err);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = tcp_shutdown_rx_4800.changed() => {
+                        break;
+                    }
+                    read_result = tcp_listener_4800.accept() => {
+                        match read_result {
+                            Ok((mut stream, addr)) => {
+                                log::debug!("Received TCP connection from {}", addr);
+
+                                let tcp_state = tcp_4800_state.clone();
+                                let mut per_connection_shutdown_rx = tcp_shutdown_rx_4800.clone();
+                                tokio::spawn(async move {
+                                    let mut buf = [0u8; 2048];
+                                    loop {
+                                        tokio::select! {
+                                            _ = per_connection_shutdown_rx.changed() => {
+                                                break;
+                                            }
+                                            read_result = stream.read(&mut buf) => {
+                                                match read_result {
+                                                    Ok(len) if len > 0 => {
+                                                        let data = &buf[..len];
+
+                                                        if let Ok(text) = std::str::from_utf8(data) {
+                                                            log::debug!("Received TCP 4800 from {}: {}", addr, text);
+
+                                                            match serde_json::from_str::<ASIAirRequest>(text) {
+                                                                Ok(req) => {
+                                                                    let (result, code) = asiair_tcp_4800_handler(&req.method, &req.params, tcp_state.clone());
+
+                                                                    // let response = ASIAirResponse {
+                                                                    //     id: req.id,
+                                                                    //     code: code as u8,
+                                                                    //     jsonrpc: "2.0".to_string(),
+                                                                    //     timestamp: "2025-05-06T00:00:00Z".to_string(),
+                                                                    //     method: req.method.clone(),
+                                                                    //     result: result,
+                                                                    // };
+
+                                                                    // let mut json = serde_json::to_string(&response).unwrap();
+                                                                    // json.push_str("\r\n");
+                                                                    // stream.write_all(json.as_bytes()).await.unwrap();
+                                                                    // log::debug!("Sent TCP response to {}: {}", addr, json);
+                                                                }
+                                                                Err(err) => {
+                                                                    eprintln!("Failed to parse TCP JSON-RPC: {}", err);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    Ok(_) => {
+                                                        log::debug!("TCP connection from {} closed", addr);
+                                                        break;
+                                                    }
+                                                    Err(err) => {
+                                                        eprintln!("Error reading from TCP stream: {}", err);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            },
+                            Err(err) => {
+                                eprintln!("Error accepting TCP connection: {}", err);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
 
         Ok(())
     }

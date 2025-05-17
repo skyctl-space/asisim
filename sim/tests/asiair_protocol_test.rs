@@ -150,6 +150,40 @@ async fn test_set_setting_request(stream: &mut TcpStream) {
     assert_eq!(response["code"], 0);
 }
 
+async fn test_get_setting_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_setting request
+    let request = json!({
+        "id": random_id,
+        "method": "get_setting",
+        "params": {
+            "lang": "en",
+        },
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_setting");
+    assert!(response["result"].is_object());
+    assert_eq!(response["code"], 0);
+}
+
 #[tokio::test]
 #[serial]
 async fn test_asiair_protocol() {
@@ -163,4 +197,5 @@ async fn test_asiair_protocol() {
     test_tcp_test_connection_request(&mut stream).await;
     test_pi_set_time_request(&mut stream).await;
     test_set_setting_request(&mut stream).await;
+    test_get_setting_request(&mut stream).await;
 }

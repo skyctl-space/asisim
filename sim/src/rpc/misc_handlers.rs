@@ -84,3 +84,13 @@ pub fn set_setting(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (V
 
     (json!(0), 0)
 }
+
+pub fn get_setting(_params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (Value, u8) {
+    let state = state.lock().unwrap();
+    (
+        json!({
+            "lang": state.language,
+        }),
+        0,
+    )
+}
