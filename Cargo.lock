@@ -110,6 +110,7 @@ dependencies = [
 name = "asisim"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
  "chrono",
  "chrono-tz",
  "env_logger",

@@ -235,6 +235,78 @@ pub struct ASIAirState {
     pub format_drive: FormatDriveState,
 }
 
+
+/// The 80-byte prefix format:
+/// ```text
+/// 0x00: magic                u16
+/// 0x02: version or code      u16
+/// 0x04: payload_size         u32 (big-endian)
+/// 0x08: timestamp or frame   u32
+/// 0x0C: flags                u16
+/// 0x0E: subcode              u16
+/// 0x10: width                u16
+/// 0x12: height               u16
+/// 0x14: (4 bytes reserved)
+/// 0x18: gain                 u16 (e.g. 0x03E8 = 1000 �~F~R 100.0)
+/// 0x1A: bin_x                u16
+/// 0x1C: bin_y or frames      u16
+/// 0x1E�~@~S0x4F: padding to 80B
+/// ```
+#[derive(Debug)]
+struct BinaryResponse {
+    magic0:       u32, // 0x00
+    magic1:       u16, // 0x04
+    pub payload_size:   u32, // 0x06
+    unknown1:       u32, // 0x0A
+    unknown2:       u32, // 0x0E
+    pub width:          u16, // 0x12
+    pub height:         u16, // 0x14
+    unknown3:       u16, // 0x16
+    unknown4:       u32, // 0x18
+    unknown5:       u32, // 0x1C
+    padding:        [u32; 48], // 0x20
+}
+
+impl Default for BinaryResponse {
+    fn default() -> Self {
+        BinaryResponse {
+            magic0: 0x03c30002,
+            magic1: 0x0050,
+            payload_size: 0,
+            unknown1: 0,
+            unknown2: 0,
+            width: 0,
+            height: 0,
+            unknown3: 0,
+            unknown4: 0,
+            unknown5: 0,
+            padding: [0; 48],
+        }
+    }
+}
+
+impl BinaryResponse {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        use byteorder::{BigEndian, WriteBytesExt};
+        let mut buf = Vec::with_capacity(0x80);
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.magic0).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.magic1).unwrap();
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.payload_size).unwrap();
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown1).unwrap();
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown2).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.width).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.height).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.unknown3).unwrap();
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown4).unwrap();
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown5).unwrap();
+        for &pad in &self.padding {
+            WriteBytesExt::write_u32::<BigEndian>(&mut buf, pad).unwrap();
+        }
+        buf
+    }
+}
+
+
 impl ASIAirSim {
     pub fn new() -> Self {
         let local_ip = local_ip().unwrap_or_else(|_| "0.0.0.0".parse().unwrap());
@@ -561,21 +633,16 @@ impl ASIAirSim {
 
                                                             match serde_json::from_str::<ASIAirRequest>(text) {
                                                                 Ok(req) => {
-                                                                    let (result, code) = asiair_tcp_4800_handler(&req.method, &req.params, tcp_state.clone());
+                                                                    let (result, _code) = asiair_tcp_4800_handler(&req.method, &req.params, tcp_state.clone());
 
-                                                                    // let response = ASIAirResponse {
-                                                                    //     id: req.id,
-                                                                    //     code: code as u8,
-                                                                    //     jsonrpc: "2.0".to_string(),
-                                                                    //     timestamp: "2025-05-06T00:00:00Z".to_string(),
-                                                                    //     method: req.method.clone(),
-                                                                    //     result: result,
-                                                                    // };
+                                                                    let mut header = BinaryResponse::default();
+                                                                    header.payload_size = result.len() as u32;
+                                                                    let bytes = header.to_bytes();
 
-                                                                    // let mut json = serde_json::to_string(&response).unwrap();
-                                                                    // json.push_str("\r\n");
-                                                                    // stream.write_all(json.as_bytes()).await.unwrap();
-                                                                    // log::debug!("Sent TCP response to {}: {}", addr, json);
+                                                                    // Send the binary header first
+                                                                    stream.write_all(&bytes).await.unwrap();
+                                                                    // Then send the binary data
+                                                                    stream.write_all(&result).await.unwrap();
                                                                 }
                                                                 Err(err) => {
                                                                     eprintln!("Failed to parse TCP JSON-RPC: {}", err);

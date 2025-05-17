@@ -48,10 +48,13 @@ pub fn asiair_tcp_4800_handler(
     method: &str,
     params: &Option<Value>, // Currently unused, consider removing if not needed
     state: Arc<Mutex<ASIAirState>>, // Currently unused, consider removing if not needed
-) -> (Value, u8) {
+) -> (Vec<u8>, u8) {
     match method {
-        "test_connection" => misc_handlers::test_connection(params, state),
-        "get_current_img" => misc_handlers::get_setting(params, state),
-        _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
+        "test_connection" => {
+            let response = misc_handlers::test_connection(params, state);
+            (serde_json::to_string(&response).unwrap().into_bytes(), 0)
+        }, 
+        // "get_current_img" => misc_handlers::get_setting(params, state),
+        _ => (vec![], 1),
     }
 }
