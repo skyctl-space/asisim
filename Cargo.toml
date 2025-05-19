@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["lib", "sim"]
+members = ["lib", "sim", "sim/utils/fits2rs"]

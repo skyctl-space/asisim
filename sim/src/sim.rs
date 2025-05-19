@@ -254,17 +254,17 @@ pub struct ASIAirState {
 /// ```
 #[derive(Debug)]
 struct BinaryResponse {
-    magic0:       u32, // 0x00
-    magic1:       u16, // 0x04
-    pub payload_size:   u32, // 0x06
-    unknown1:       u32, // 0x0A
-    unknown2:       u32, // 0x0E
-    pub width:          u16, // 0x12
-    pub height:         u16, // 0x14
-    unknown3:       u16, // 0x16
-    unknown4:       u32, // 0x18
-    unknown5:       u32, // 0x1C
-    padding:        [u32; 48], // 0x20
+    magic0:       u32,        // 4 bytes
+    magic1:       u16,        // 2 bytes
+    pub payload_size: u32,    // 4 bytes
+    unknown1:     [u8; 5],    // 5 bytes
+    pub id:       u8,         // 1 byte
+    pub width:    u16,        // 2 bytes
+    pub height:   u16,        // 2 bytes
+    unknown2:     u32,        // 4 bytes
+    unknown3:     u32,        // 4 bytes
+    unknown4:     u32,        // 4 bytes
+    padding:      [u32; 12],  // 48 bytes (12 * 4)
 }
 
 impl Default for BinaryResponse {
@@ -273,14 +273,14 @@ impl Default for BinaryResponse {
             magic0: 0x03c30002,
             magic1: 0x0050,
             payload_size: 0,
-            unknown1: 0,
-            unknown2: 0,
+            unknown1: [0; 5],
+            id: 0,
             width: 0,
             height: 0,
+            unknown2: 0,
             unknown3: 0,
             unknown4: 0,
-            unknown5: 0,
-            padding: [0; 48],
+            padding: [0; 12],
         }
     }
 }
@@ -292,13 +292,15 @@ impl BinaryResponse {
         WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.magic0).unwrap();
         WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.magic1).unwrap();
         WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.payload_size).unwrap();
-        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown1).unwrap();
-        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown2).unwrap();
+        for &byte in &self.unknown1 {
+            WriteBytesExt::write_u8(&mut buf, byte).unwrap();
+        }
+        WriteBytesExt::write_u8(&mut buf, self.id).unwrap();
         WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.width).unwrap();
         WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.height).unwrap();
-        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.unknown3).unwrap();
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown2).unwrap();
+        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown3).unwrap();
         WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown4).unwrap();
-        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown5).unwrap();
         for &pad in &self.padding {
             WriteBytesExt::write_u32::<BigEndian>(&mut buf, pad).unwrap();
         }
@@ -306,6 +308,11 @@ impl BinaryResponse {
     }
 }
 
+pub struct BinaryResult {
+    pub data: Vec<u8>,
+    pub width: u16,
+    pub height: u16,
+}
 
 impl ASIAirSim {
     pub fn new() -> Self {
@@ -633,16 +640,23 @@ impl ASIAirSim {
 
                                                             match serde_json::from_str::<ASIAirRequest>(text) {
                                                                 Ok(req) => {
-                                                                    let (result, _code) = asiair_tcp_4800_handler(&req.method, &req.params, tcp_state.clone());
+                                                                    if let Ok(result) = asiair_tcp_4800_handler(&req.method, &req.params, tcp_state.clone()) {
+                                                                        let mut header = BinaryResponse::default();
+                                                                        header.id = req.id.as_u64().unwrap() as u8;
+                                                                        header.payload_size = result.data.len() as u32;
+                                                                        header.width = result.width;
+                                                                        header.height = result.height;
+                                                                        let bytes = header.to_bytes();
 
-                                                                    let mut header = BinaryResponse::default();
-                                                                    header.payload_size = result.len() as u32;
-                                                                    let bytes = header.to_bytes();
-
-                                                                    // Send the binary header first
-                                                                    stream.write_all(&bytes).await.unwrap();
-                                                                    // Then send the binary data
-                                                                    stream.write_all(&result).await.unwrap();
+                                                                        // Send the binary header first
+                                                                        log::debug!("Sending TCP 4800 header of size {}", bytes.len());
+                                                                        stream.write_all(&bytes).await.unwrap();
+                                                                        // Then send the binary data
+                                                                        log::debug!("Sending {} bytes of binary data", result.data.len());
+                                                                        stream.write_all(&result.data).await.unwrap();
+                                                                    } else {
+                                                                        eprintln!("Failed to handle TCP 4800 request");
+                                                                    }
                                                                 }
                                                                 Err(err) => {
                                                                     eprintln!("Failed to parse TCP JSON-RPC: {}", err);

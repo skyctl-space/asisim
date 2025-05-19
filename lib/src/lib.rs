@@ -1,18 +1,32 @@
 mod connection;
+mod img;
 mod settings;
 
+use byteorder::{BigEndian, ByteOrder};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::Duration;
 
 type Responder<T> = oneshot::Sender<Result<T, Box<dyn std::error::Error + Send + Sync>>>;
 
+#[derive(Debug, Clone)]
+pub struct BinaryResult {
+    pub data: Vec<u8>,
+    pub width: u16,
+    pub height: u16,
+}
+
 #[derive(Debug)]
 enum ASIAirCommand {
+    BinaryGet {
+        method: String,
+        params: Option<Value>,
+        tx: Responder<BinaryResult>,
+    },
     Get {
         method: String,
         params: Option<Value>,
@@ -135,6 +149,56 @@ pub struct PlateSolveEvent {
     pub state: EventState,
 }
 
+#[allow(dead_code)]
+#[derive(Debug)]
+struct BinaryHeader {
+    magic0: u32,           // 0x00
+    magic1: u16,           // 0x04
+    pub payload_size: u32, // 0x06
+    unknown1: [u8; 5],     // 0x0A
+    pub id: u8,            // 0x0F
+    pub width: u16,        // 0x12
+    pub height: u16,       // 0x14
+    unknown2: u32,         // 0x16
+    unknown3: u32,         // 0x1A
+    unknown4: u32,         // 0x1C
+    padding: [u32; 12],    // 0x20
+}
+
+impl BinaryHeader {
+    fn parse(buf: &[u8; 80]) -> Self {
+        let magic0 = BigEndian::read_u32(&buf[0..4]);
+        let magic1 = BigEndian::read_u16(&buf[4..6]);
+        let payload_size = BigEndian::read_u32(&buf[6..10]);
+
+        let mut unknown1 = [0u8; 5];
+        unknown1.copy_from_slice(&buf[10..15]);
+
+        let id = buf[15];
+        let width = BigEndian::read_u16(&buf[16..18]);
+        let height = BigEndian::read_u16(&buf[18..20]);
+        let unknown2 = BigEndian::read_u32(&buf[20..24]);
+        let unknown3 = BigEndian::read_u32(&buf[24..28]);
+        let unknown4 = BigEndian::read_u32(&buf[28..32]);
+
+        let padding = [0u32; 12];
+
+        BinaryHeader {
+            magic0,
+            magic1,
+            payload_size,
+            unknown1,
+            id,
+            width,
+            height,
+            unknown2,
+            unknown3,
+            unknown4,
+            padding,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ASIAir {
     // The address of the ASIAir device
@@ -143,9 +207,16 @@ pub struct ASIAir {
     cmd_timeout: Duration,
 
     // Channel for async commmands to send to the ASIAir
-    tx: Option<mpsc::Sender<ASIAirCommand>>,
+    tx_4500: Option<mpsc::Sender<ASIAirCommand>>,
+    tx_4700: Option<mpsc::Sender<ASIAirCommand>>,
+    tx_4800: Option<mpsc::Sender<ASIAirCommand>>,
+
     // Map of pending responses, keyed by request ID
     pending_responses: Arc<Mutex<HashMap<u32, Responder<Value>>>>,
+    // Map of pending responses, keyed by request ID
+    pending_responses_4500: Arc<Mutex<HashMap<u32, Responder<Value>>>>,
+    // Map of pending responses, keyed by request ID
+    pending_responses_4800: Arc<Mutex<HashMap<u32, Responder<BinaryResult>>>>,
     // Channel for shutdown signal
     shutdown_tx: Option<watch::Sender<()>>,
     // Channel for reconnection attempts

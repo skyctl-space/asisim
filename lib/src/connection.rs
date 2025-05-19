@@ -17,6 +17,8 @@ use super::EventState;
 use super::ExposureChangeEvent;
 use super::PiStatusEvent;
 use super::PlateSolveEvent;
+use super::BinaryHeader;
+use super::BinaryResult;
 
 impl ASIAir {
     pub fn new(addr: Ipv4Addr) -> Self {
@@ -32,8 +34,12 @@ impl ASIAir {
         ASIAir {
             addr,
             cmd_timeout: Duration::from_secs(5),
-            tx: None,
+            tx_4500: None,
+            tx_4700: None,
+            tx_4800: None,
             pending_responses: Arc::new(Mutex::new(HashMap::new())),
+            pending_responses_4500: Arc::new(Mutex::new(HashMap::new())),
+            pending_responses_4800: Arc::new(Mutex::new(HashMap::new())),
             shutdown_tx: None,
             reconnect_tx: None,
             should_be_connected: Arc::new(AtomicBool::new(false)),
@@ -94,7 +100,7 @@ impl ASIAir {
         let (mut reader, mut writer) = tokio::io::split(stream);
 
         let (tx, mut rx) = mpsc::channel::<ASIAirCommand>(32);
-        self.tx = Some(tx.clone());
+        self.tx_4700 = Some(tx.clone());
 
         let (shutdown_tx, shutdown_rx) = watch::channel(());
         self.shutdown_tx = Some(shutdown_tx);
@@ -134,12 +140,12 @@ impl ASIAir {
                             params: None,
                             tx: response_tx,
                         };
-                        log::debug!("Testing ASIAIR connection watchdog...");
+                        // log::debug!("Testing ASIAIR connection watchdog...");
                         if tx.send(command).await.is_ok() {
                             // Wait for the response with a timeout
                             match tokio::time::timeout(Duration::from_secs(2), response_rx).await {
-                                Ok(Ok(response)) => {
-                                    log::debug!("Watchdog response received: {:?}", response);
+                                Ok(Ok(_response)) => {
+                                    // log::debug!("Watchdog response received: {:?}", response);
                                 }
                                 Ok(Err(_)) | Err(_) => {
                                     log::warn!("Connection to ASIAir lost or timed out");
@@ -348,10 +354,121 @@ impl ASIAir {
                                     eprintln!("Write error: {:?}", e);
                                 }
                             }
+                            _ => {
+                                log::warn!("Unexpected command: {:?}", command);
+                            }
                         }
                     }
                     _ = shutdown_writer_rx.changed() => {
                         log::debug!("Writer task received shutdown");
+                        break;
+                    }
+                }
+            }
+        });
+
+        let socket_4800 = SocketAddrV4::new(self.addr.clone(), 4800);
+        let stream_4800 = TcpStream::connect(socket_4800).await?;
+        let (mut reader_4800, mut writer_4800) = tokio::io::split(stream_4800);
+        let mut shutdown_reader_rx_4800 = shutdown_rx.clone();
+        let mut shutdown_writer_rx_4800 = shutdown_rx.clone();
+        let reconnect_tx_reader_4800 = self.reconnect_tx.clone().unwrap();
+        let should_be_connected_4800 = self.should_be_connected.clone();
+
+        // Create a new pending responses map for port 4800
+        let pending_responses_writer_4800 = Arc::clone(&self.pending_responses_4800);
+        let pending_responses_reader_4800 = Arc::clone(&self.pending_responses_4800);
+
+        let (tx_4800, mut rx_4800) = mpsc::channel::<ASIAirCommand>(32);
+        self.tx_4800 = Some(tx_4800.clone());
+
+        // Read loop for port 4800
+        tokio::spawn(async move {
+            let mut hdr_buf = [0u8; 80];
+            loop {
+                tokio::select! {
+                    read_result = reader_4800.read_exact(&mut hdr_buf) => {
+                        match read_result {
+                            Ok(0) => {
+                                if should_be_connected_4800.load(Ordering::SeqCst) {
+                                    let _ = reconnect_tx_reader_4800.send(()).await;
+                                }
+                                break
+                            },
+                            Ok(_len) => {
+                                let header = BinaryHeader::parse(&hdr_buf);
+
+                                let mut payload = vec![0u8; header.payload_size as usize];
+                                if let Err(e) = reader_4800.read_exact(&mut payload).await {
+                                    eprintln!("Read error (4800): {:?}", e);
+                                    break;
+                                }
+
+                                if let Some(tx) = pending_responses_reader_4800
+                                    .lock()
+                                    .unwrap()
+                                    .remove(&(header.id as u32))
+                                {
+                                    let result = BinaryResult {
+                                        data: payload.clone(),
+                                        width: header.width,
+                                        height: header.height,
+                                    };
+                                    let _ = tx.send(Ok(result));
+                                } else {
+                                    log::warn!("No pending response for ID {}: {:?}", header.id, hdr_buf);
+                                }
+                                
+                            },
+                            Err(e) => {
+                                eprintln!("Read error (4800): {:?}", e);
+                                break;
+                            }
+                        }
+                    }
+                    _ = shutdown_reader_rx_4800.changed() => {
+                        log::debug!("Reader 4800 task received shutdown");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Write loop for port 4800
+        tokio::spawn(async move {
+            let id_counter = AtomicU32::new(1);
+            loop {
+                tokio::select! {
+                    Some(command) = rx_4800.recv() => {
+                        match command {
+                            ASIAirCommand::BinaryGet { method, params, tx } => {
+                                let id = id_counter.fetch_add(1, Ordering::SeqCst);
+                                let request = if let Some(params) = params {
+                                    json!({
+                                        "id": id,
+                                        "method": method,
+                                        "params": params,
+                                    })
+                                } else {
+                                    json!({
+                                        "id": id,
+                                        "method": method,
+                                    })
+                                };
+                                pending_responses_writer_4800.lock().unwrap().insert(id, tx);
+                                let mut message = request.to_string();
+                                message.push_str("\r\n");
+                                if let Err(e) = writer_4800.write_all(message.as_bytes()).await {
+                                    eprintln!("Write error (4800): {:?}", e);
+                                }
+                            }
+                            _ => {
+                                log::warn!("Unexpected command for port 4800: {:?}", command);
+                            }
+                        }
+                    }
+                    _ = shutdown_writer_rx_4800.changed() => {
+                        log::debug!("Writer 4800 task received shutdown");
                         break;
                     }
                 }
@@ -400,7 +517,9 @@ impl ASIAir {
         self.pending_responses.lock().unwrap().clear();
 
         // Disconnect and reset the state
-        self.tx = None;
+        self.tx_4500 = None;
+        self.tx_4700 = None;
+        self.tx_4800 = None;
         self.shutdown_tx = None;
         self.connected.store(false, Ordering::SeqCst);
         let _ = self.connection_state_tx.send(false); // Notify disconnection
@@ -442,7 +561,7 @@ impl ASIAir {
         self.plate_solve_tx.subscribe()
     }
 
-    pub async fn rpc_request(
+    pub async fn rpc_request_4700(
         &self,
         method: &str,
         params: Option<Value>,
@@ -450,7 +569,7 @@ impl ASIAir {
         if !self.should_be_connected.load(Ordering::SeqCst) {
             return Err("Not connected".into());
         }
-        if let Some(tx) = &self.tx {
+        if let Some(tx) = &self.tx_4700 {
             let (response_tx, response_rx) = oneshot::channel();
             let command = ASIAirCommand::Get {
                 method: method.to_string(),
@@ -469,9 +588,36 @@ impl ASIAir {
         }
     }
 
+    pub async fn rpc_request_4800(
+        &self,
+        method: &str,
+        params: Option<Value>,
+    ) -> Result<BinaryResult, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.should_be_connected.load(Ordering::SeqCst) {
+            return Err("Not connected".into());
+        }
+        if let Some(tx) = &self.tx_4800 {
+            let (response_tx, response_rx) = oneshot::channel();
+            let command = ASIAirCommand::BinaryGet {
+                method: method.to_string(),
+                params,
+                tx: response_tx,
+            };
+            tx.send(command).await.unwrap();
+
+            // Wait for the response with a timeout
+            match tokio::time::timeout(self.cmd_timeout, response_rx).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(_)) | Err(_) => Err("Failed to get response".into()),
+            }
+        } else {
+            Err("Not connected".into())
+        }
+    }
+
     /// Test the connection to the ASIAir device
     pub async fn test_connection(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let response = self.rpc_request("test_connection", None).await;
+        let response = self.rpc_request_4700("test_connection", None).await;
         if let Ok(value) = response {
             if value.as_str() == Some("server connected!") {
                 Ok(())
@@ -502,7 +648,7 @@ impl ASIAir {
         page: ASIAirPage,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let response = self
-            .rpc_request("set_page", Some(json!(vec![page.as_str()])))
+            .rpc_request_4700("set_page", Some(json!(vec![page.as_str()])))
             .await;
         if let Ok(value) = response {
             if value.as_i64() == Some(0) {

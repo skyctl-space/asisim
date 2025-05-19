@@ -3,9 +3,12 @@ use std::sync::{Arc, Mutex};
 
 mod app_handlers;
 mod misc_handlers;
+mod img_handlers;
+mod sample_raw;
 pub mod protocol;
 
 use super::ASIAirState;
+use crate::sim::BinaryResult;
 
 pub fn asiair_udp_handler(
     method: &str,
@@ -48,13 +51,22 @@ pub fn asiair_tcp_4800_handler(
     method: &str,
     params: &Option<Value>, // Currently unused, consider removing if not needed
     state: Arc<Mutex<ASIAirState>>, // Currently unused, consider removing if not needed
-) -> (Vec<u8>, u8) {
+) -> Result<BinaryResult, Box<dyn std::error::Error + Send + Sync>> {
+    println!("Asiair TCP 4800 handler called with method: {}", method);
     match method {
         "test_connection" => {
             let response = misc_handlers::test_connection(params, state);
-            (serde_json::to_string(&response).unwrap().into_bytes(), 0)
-        }, 
-        // "get_current_img" => misc_handlers::get_setting(params, state),
-        _ => (vec![], 1),
+            Ok(BinaryResult {
+                data: serde_json::to_string(&response).unwrap().into_bytes(),
+                width: 0,
+                height: 0,
+            })
+        },
+        "get_current_img" => {
+            Ok(img_handlers::get_current_img(params, state))
+        }
+        _ => {
+            return Err(format!("Unknown method: {}", method).into());
+        }
     }
 }

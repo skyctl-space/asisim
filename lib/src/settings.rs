@@ -34,7 +34,7 @@ impl ASIAir {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let method = "pi_set_time";
         let response = self
-            .rpc_request(
+            .rpc_request_4700(
                 method,
                 Some(json!(vec![TimeParams {
                     time_zone: date_time.timezone().name().to_string(),
@@ -67,7 +67,7 @@ impl ASIAir {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let method = "set_setting";
         let response = self
-            .rpc_request(method, Some(json!({ "lang": lang.as_str() })))
+            .rpc_request_4700(method, Some(json!({ "lang": lang.as_str() })))
             .await;
         if let Ok(value) = response {
             if value.as_i64() == Some(0) {
