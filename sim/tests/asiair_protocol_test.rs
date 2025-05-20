@@ -280,7 +280,7 @@ async fn test_get_connected_cameras_request(stream: &mut TcpStream) {
     assert_eq!(response["code"], 0);
 }
 
-async fn test_get_camera_state_request(stream: &mut TcpStream, should_be_opened : bool) {
+async fn test_get_camera_state_request(stream: &mut TcpStream, should_be_opened: bool) {
     // Generate a random ID for the request
     let random_id: u64 = rand::rng().random_range(1..1000);
 
@@ -410,7 +410,6 @@ async fn test_get_camera_info_request(stream: &mut TcpStream) {
     assert!(response["result"].is_object());
     assert_eq!(response["code"], 0);
 }
-
 
 #[tokio::test]
 #[serial]

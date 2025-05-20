@@ -17,5 +17,8 @@ pub struct ASIAirResponse {
     #[serde(rename = "Timestamp")]
     pub timestamp: String,
     pub method: String,
-    pub result: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
 }

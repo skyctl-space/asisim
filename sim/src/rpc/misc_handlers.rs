@@ -20,11 +20,11 @@ pub fn scan_air(_params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (Val
 }
 
 // This method is called over TCP by the ASIAIR to test the connection
-pub fn test_connection(_params: &Option<Value>, _state: Arc<Mutex<ASIAirState>>) -> (Value, u8) {
-    (json!("server connected!"), 0)
+pub fn test_connection(_params: &Option<Value>, _state: Arc<Mutex<ASIAirState>>) -> Result<(Value, u8), (String, u8)> {
+    Ok((json!("server connected!"), 0))
 }
 
-pub fn pi_set_time(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (Value, u8) {
+pub fn pi_set_time(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> Result<(Value, u8), (String, u8)> {
     let mut state = state.lock().unwrap();
 
     if let Some(value) = params {
@@ -62,18 +62,18 @@ pub fn pi_set_time(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (V
             )
             .unwrap();
 
-        (json!(0), 0)
+        Ok((json!(0), 0))
     } else {
-        (json!({ "error": "params is None" }), 1)
+        Err(("params is None".to_string(), 1))
     }
 }
 
-pub fn set_setting(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (Value, u8) {
+pub fn set_setting(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> Result<(Value, u8), (String, u8)> {
     let mut state = state.lock().unwrap();
 
     // Check if params is None or not
     if params.is_none() {
-        return (json!({ "error": "params is None" }), 1);
+        return Err(("params is None".to_string(), 1));
     }
 
     let params = serde_json::from_str::<Value>(params.as_ref().unwrap().as_str().unwrap_or("{}"))
@@ -82,15 +82,15 @@ pub fn set_setting(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (V
 
     state.language = lang.to_string();
 
-    (json!(0), 0)
+    Ok((json!(0), 0))
 }
 
-pub fn get_setting(_params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> (Value, u8) {
+pub fn get_setting(_params: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> Result<(Value, u8), (String, u8)> {
     let state = state.lock().unwrap();
-    (
+    Ok((
         json!({
             "lang": state.language,
         }),
         0,
-    )
+    ))
 }

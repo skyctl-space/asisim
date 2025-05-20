@@ -1,13 +1,15 @@
 use crate::rpc::protocol::{ASIAirRequest, ASIAirResponse};
-use crate::rpc::{asiair_tcp_handler, asiair_udp_handler, asiair_tcp_4500_handler, asiair_tcp_4800_handler};
+use crate::rpc::{
+    asiair_tcp_4500_handler, asiair_tcp_4800_handler, asiair_tcp_handler, asiair_udp_handler,
+};
 use crate::rtc;
 use local_ip_address::local_ip;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::watch;
-use once_cell::sync::Lazy;
-use std::collections::HashMap;
 
 use super::ASIAirSim;
 
@@ -224,7 +226,7 @@ pub struct AppState {
     pub restart_guide: RestartGuideState,
     pub batch_stack: BatchStackState,
     pub demonstrate: DemonstrateState,
-    pub format_drive: FormatDriveState
+    pub format_drive: FormatDriveState,
 }
 
 impl Default for AppState {
@@ -286,7 +288,7 @@ impl Default for AppState {
             restart_guide: RestartGuideState { is_working: false },
             batch_stack: BatchStackState { is_working: false },
             demonstrate: DemonstrateState { is_working: false },
-            format_drive: FormatDriveState { is_working:false }
+            format_drive: FormatDriveState { is_working: false },
         }
     }
 }
@@ -364,7 +366,56 @@ pub enum CameraState {
     #[serde(rename = "close")]
     Close,
     #[serde(rename = "idle")]
-    Idle{name: String, path: String},
+    Idle { name: String, path: String },
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CameraControlMeta {
+    pub name: String,
+    pub r#type: String,
+}
+
+pub static CAMERA_CONTROL_TYPES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert("Exposure", "number");
+    m.insert("Temperature", "number");
+    m.insert("Gain", "number");
+    m.insert("CoolerOn", "number");
+    m.insert("CoolPowerPerc", "number");
+    m.insert("TargetTemp", "text");
+    m.insert("AntiDewHeater", "number");
+    m.insert("Red", "number");
+    m.insert("Blue", "number");
+    m
+});
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CameraControls {
+    pub exposure: u64,
+    pub temperature: i32,
+    pub gain: u32,
+    pub cooler_on: u32,
+    pub cooler_power_perc: u32,
+    pub target_temp: i32,
+    pub anti_dew_heater: u32,
+    pub red: u32,
+    pub blue: u32,
+}
+
+impl Default for CameraControls {
+    fn default() -> Self {
+        CameraControls {
+            exposure: 0,
+            temperature: 0,
+            gain: 0,
+            cooler_on: 0,
+            cooler_power_perc: 0,
+            target_temp: 0,
+            anti_dew_heater: 0,
+            red: 0,
+            blue: 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -389,8 +440,8 @@ pub struct ASIAirState {
     pub connected_cameras: Vec<ConnectedCamera>,
 
     pub camera_state: CameraState,
+    pub camera_controls: CameraControls,
 }
-
 
 /// The 80-byte prefix format:
 /// ```text
@@ -410,17 +461,17 @@ pub struct ASIAirState {
 /// ```
 #[derive(Debug)]
 struct BinaryResponse {
-    magic0:       u32,        // 4 bytes
-    magic1:       u16,        // 2 bytes
-    pub payload_size: u32,    // 4 bytes
-    unknown1:     [u8; 5],    // 5 bytes
-    pub id:       u8,         // 1 byte
-    pub width:    u16,        // 2 bytes
-    pub height:   u16,        // 2 bytes
-    unknown2:     u32,        // 4 bytes
-    unknown3:     u32,        // 4 bytes
-    unknown4:     u32,        // 4 bytes
-    padding:      [u32; 12],  // 48 bytes (12 * 4)
+    magic0: u32,           // 4 bytes
+    magic1: u16,           // 2 bytes
+    pub payload_size: u32, // 4 bytes
+    unknown1: [u8; 5],     // 5 bytes
+    pub id: u8,            // 1 byte
+    pub width: u16,        // 2 bytes
+    pub height: u16,       // 2 bytes
+    unknown2: u32,         // 4 bytes
+    unknown3: u32,         // 4 bytes
+    unknown4: u32,         // 4 bytes
+    padding: [u32; 12],    // 48 bytes (12 * 4)
 }
 
 impl Default for BinaryResponse {
@@ -484,7 +535,8 @@ pub struct CameraInfo {
 
 pub static CAMERAS_INFO: Lazy<HashMap<&'static str, CameraInfo>> = Lazy::new(|| {
     let mut m = HashMap::new();
-    m.insert("ZWO ASI2600MC Pro",
+    m.insert(
+        "ZWO ASI2600MC Pro",
         CameraInfo {
             chip_size: [6248, 4176],
             bins: vec![1, 2, 3, 4],
@@ -498,7 +550,6 @@ pub static CAMERAS_INFO: Lazy<HashMap<&'static str, CameraInfo>> = Lazy::new(|| 
     );
     m
 });
-
 
 impl ASIAirSim {
     pub fn new() -> Self {
@@ -532,10 +583,11 @@ impl ASIAirSim {
                         id: 1,
                         path: "bus1.port:1,4,1,".to_string(),
                         dslr: false,
-                    }
+                    },
                 ],
 
                 camera_state: CameraState::Close,
+                camera_controls: CameraControls::default(),
             })),
             shutdown_tx: None,
         }
@@ -587,7 +639,8 @@ impl ASIAirSim {
                                                 jsonrpc: "2.0".to_string(),
                                                 timestamp: "2025-05-06T00:00:00Z".to_string(),
                                                 method: req.method.clone(),
-                                                result: result,
+                                                result: Some(result),
+                                                error: None,
                                             };
 
                                             let json = serde_json::to_string(&response).unwrap();
@@ -639,16 +692,26 @@ impl ASIAirSim {
 
                                                             match serde_json::from_str::<ASIAirRequest>(text) {
                                                                 Ok(req) => {
-                                                                    let (result, code) = asiair_tcp_handler(&req.method, &req.params, tcp_state.clone());
-
-                                                                    let response = ASIAirResponse {
+                                                                    let mut response = ASIAirResponse {
                                                                         id: req.id,
-                                                                        code: code as u8,
+                                                                        code: 0,
                                                                         jsonrpc: "2.0".to_string(),
                                                                         timestamp: "2025-05-06T00:00:00Z".to_string(),
                                                                         method: req.method.clone(),
-                                                                        result: result,
+                                                                        error: None,
+                                                                        result: None,
                                                                     };
+
+                                                                    match asiair_tcp_handler(&req.method, &req.params, tcp_state.clone()) {
+                                                                        Ok((result, code)) => {
+                                                                            response.result = Some(result);
+                                                                            response.code = code as u8;
+                                                                        }
+                                                                        Err((err_msg, code)) => {
+                                                                            response.error = Some(err_msg);
+                                                                            response.code = code as u8;
+                                                                        }
+                                                                    }
 
                                                                     let mut json = serde_json::to_string(&response).unwrap();
                                                                     json.push_str("\r\n");
@@ -714,16 +777,26 @@ impl ASIAirSim {
 
                                                             match serde_json::from_str::<ASIAirRequest>(text) {
                                                                 Ok(req) => {
-                                                                    let (result, code) = asiair_tcp_4500_handler(&req.method, &req.params, tcp_state.clone());
-
-                                                                    let response = ASIAirResponse {
+                                                                    let mut response = ASIAirResponse {
                                                                         id: req.id,
-                                                                        code: code as u8,
+                                                                        code: 0,
                                                                         jsonrpc: "2.0".to_string(),
                                                                         timestamp: "2025-05-06T00:00:00Z".to_string(),
                                                                         method: req.method.clone(),
-                                                                        result: result,
+                                                                        error: None,
+                                                                        result: None,
                                                                     };
+
+                                                                    match asiair_tcp_handler(&req.method, &req.params, tcp_state.clone()) {
+                                                                        Ok((result, code)) => {
+                                                                            response.result = Some(result);
+                                                                            response.code = code as u8;
+                                                                        }
+                                                                        Err((err_msg, code)) => {
+                                                                            response.error = Some(err_msg);
+                                                                            response.code = code as u8;
+                                                                        }
+                                                                    }
 
                                                                     let mut json = serde_json::to_string(&response).unwrap();
                                                                     json.push_str("\r\n");
@@ -835,7 +908,6 @@ impl ASIAirSim {
                 }
             }
         });
-
 
         Ok(())
     }

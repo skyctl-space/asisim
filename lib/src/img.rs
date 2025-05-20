@@ -1,9 +1,7 @@
-
-
 use super::ASIAir;
 use std::io::Cursor;
-use zip::ZipArchive;
 use std::io::Read;
+use zip::ZipArchive;
 
 impl ASIAir {
     pub async fn get_current_img(

@@ -1,10 +1,10 @@
 use std::env;
-use std::fs::{File, write};
+use std::fs::{write, File};
+use std::io::Cursor;
 use std::io::{BufReader, Write};
 use std::path::Path;
 use zip::write::FileOptions;
 use zip::ZipWriter;
-use std::io::Cursor;
 
 use fitsrs::{Fits, Pixels, HDU};
 use rayon::prelude::*;
@@ -33,10 +33,19 @@ fn main() -> Result<(), String> {
             return Err("Expected I16 pixel data".to_string());
         };
 
-        generate_raw_data_and_module(&data.collect::<Vec<i16>>(), width, height, output_dir, module_name)
-            .map_err(|e| e.to_string())?;
+        generate_raw_data_and_module(
+            &data.collect::<Vec<i16>>(),
+            width,
+            height,
+            output_dir,
+            module_name,
+        )
+        .map_err(|e| e.to_string())?;
 
-        println!("✅ Generated `{}/{}.rs` and binary image file.", output_dir, module_name);
+        println!(
+            "✅ Generated `{}/{}.rs` and binary image file.",
+            output_dir, module_name
+        );
         Ok(())
     } else {
         Err("No primary HDU found".to_string())
@@ -57,12 +66,14 @@ fn generate_raw_data_and_module(
     let mut buffer = Cursor::new(Vec::new());
     {
         let mut zip = ZipWriter::new(&mut buffer);
-        let options = FileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         zip.start_file("raw_data", options)?;
         // Parallel conversion of i16 slice to Vec<u8>
-        let raw_bytes: Vec<u8> = image_data.par_iter().flat_map_iter(|&val| val.to_be_bytes()).collect();
+        let raw_bytes: Vec<u8> = image_data
+            .par_iter()
+            .flat_map_iter(|&val| val.to_be_bytes())
+            .collect();
         zip.write_all(&raw_bytes)?;
 
         zip.finish()?;

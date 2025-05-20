@@ -13,12 +13,12 @@ use super::ASIAir;
 use super::ASIAirCommand;
 use super::ASIAirPage;
 use super::AnnotateEvent;
+use super::BinaryHeader;
+use super::BinaryResult;
 use super::EventState;
 use super::ExposureChangeEvent;
 use super::PiStatusEvent;
 use super::PlateSolveEvent;
-use super::BinaryHeader;
-use super::BinaryResult;
 
 impl ASIAir {
     pub fn new(addr: Ipv4Addr) -> Self {
@@ -418,7 +418,7 @@ impl ASIAir {
                                 } else {
                                     log::warn!("No pending response for ID {}: {:?}", header.id, hdr_buf);
                                 }
-                                
+
                             },
                             Err(e) => {
                                 eprintln!("Read error (4800): {:?}", e);
