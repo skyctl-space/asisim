@@ -6,11 +6,13 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::watch;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
 use super::ASIAirSim;
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ASIAirPage {
     Preview,
     Focus,
@@ -35,13 +37,13 @@ impl ASIAirPage {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AnnotateState {
     pub is_working: bool,
     pub lapse_ms: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SolveState {
     pub is_working: bool,
     pub lapse_ms: u32,
@@ -49,7 +51,7 @@ pub struct SolveState {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ExposureModes {
     Single,
     Continuous,
@@ -64,7 +66,7 @@ impl ExposureModes {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum CaptureStatus {
     Idle,
     // Working,
@@ -79,25 +81,25 @@ impl CaptureStatus {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CaptureState {
     pub exposure_mode: ExposureModes,
     pub is_working: bool,
     pub state: CaptureStatus,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PaState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AutoGotoState {
     pub is_working: bool,
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum FrameType {
     Light,
     Dark,
@@ -116,7 +118,7 @@ impl FrameType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StackState {
     pub is_working: bool,
     pub frame_type: FrameType,
@@ -124,7 +126,8 @@ pub struct StackState {
     pub dropped_frame: u32,
     pub total_frame: u32,
 }
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportImageState {
     pub is_working: bool,
     pub success_frame: u32,
@@ -133,23 +136,23 @@ pub struct ExportImageState {
     pub dst_storage: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MeridFlipState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AutoFocusResult {
     // Fields for AutoFocusResult
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AutoFocuserReason {
     pub comment: String,
     pub code: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AutoFocusState {
     #[allow(dead_code)]
     pub result: AutoFocusResult,
@@ -158,13 +161,13 @@ pub struct AutoFocusState {
     pub reason: AutoFocuserReason,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FindStarState {
     pub is_working: bool,
     pub lapse_ms: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AviRecordState {
     pub is_working: bool,
     pub lapse_sec: u32,
@@ -172,49 +175,38 @@ pub struct AviRecordState {
     pub write_file_fps: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RtmpState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AutoExpState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RestartGuideState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BatchStackState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DemonstrateState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FormatDriveState {
     pub is_working: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct ASIAirState {
-    pub name: String,
-    pub guid: String,
-    pub ip: String,
-    pub is_pi4: bool,
-    pub model: String,
-    pub ssid: String,
-    pub connect_lock: bool,
-
-    pub rtc: rtc::RTC,
-    pub language: String,
-
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AppState {
     pub page: ASIAirPage,
     pub annotate: AnnotateState,
     pub solve: SolveState,
@@ -232,7 +224,171 @@ pub struct ASIAirState {
     pub restart_guide: RestartGuideState,
     pub batch_stack: BatchStackState,
     pub demonstrate: DemonstrateState,
-    pub format_drive: FormatDriveState,
+    pub format_drive: FormatDriveState
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        AppState {
+            page: ASIAirPage::Preview,
+            annotate: AnnotateState {
+                is_working: false,
+                lapse_ms: 0,
+            },
+            solve: SolveState {
+                is_working: false,
+                lapse_ms: 0,
+                filename: "".to_string(),
+            },
+            capture: CaptureState {
+                exposure_mode: ExposureModes::Single,
+                is_working: false,
+                state: CaptureStatus::Idle,
+            },
+            pa: PaState { is_working: false },
+            auto_goto: AutoGotoState { is_working: false },
+            stack: StackState {
+                is_working: false,
+                frame_type: FrameType::Light,
+                stacked_frame: 0,
+                dropped_frame: 0,
+                total_frame: 0,
+            },
+            export_image: ExportImageState {
+                is_working: false,
+                success_frame: 0,
+                total_frame: 0,
+                keep: false,
+                dst_storage: "".to_string(),
+            },
+            merid_flip: MeridFlipState { is_working: false },
+            auto_focus: AutoFocusState {
+                result: AutoFocusResult {},
+                is_working: false,
+                focuser_opened: false,
+                reason: AutoFocuserReason {
+                    comment: "manual".to_string(),
+                    code: 0,
+                },
+            },
+            find_star: FindStarState {
+                is_working: false,
+                lapse_ms: 0,
+            },
+            avi_record: AviRecordState {
+                is_working: false,
+                lapse_sec: 0,
+                fps: 10.0,
+                write_file_fps: 0.0,
+            },
+            rtmp: RtmpState { is_working: false },
+            auto_exp: AutoExpState { is_working: false },
+            restart_guide: RestartGuideState { is_working: false },
+            batch_stack: BatchStackState { is_working: false },
+            demonstrate: DemonstrateState { is_working: false },
+            format_drive: FormatDriveState { is_working:false }
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AppSetting {
+    pub autogoto_exp_us: u64,
+    pub comets_version: u32,
+    pub comets_md5: String,
+    pub continuous_preview: bool,
+    pub goto_auto: bool,
+    pub flat_auto_exp: bool,
+    pub light_custom_exp: bool,
+    pub flat_custom_exp: bool,
+    pub dark_custom_exp: bool,
+    pub bias_custom_exp: bool,
+    pub bias_exposure: u32,
+    pub flat_exposure: u32,
+    pub light_exposure: u32,
+    pub dark_exposure: u32,
+    pub flat_bin: u32,
+    pub bias_bin: u32,
+    pub dark_bin: u32,
+    pub light_bin: u32,
+    pub main_camera_name: String,
+    pub guide_rate: f32,
+    pub goto_target_dec: f64,
+    pub goto_target_ra: f64,
+    pub goto_target_name: String,
+    pub guide_camera_name: String,
+}
+
+impl Default for AppSetting {
+    fn default() -> Self {
+        AppSetting {
+            autogoto_exp_us: 10000000,
+            comets_version: 1746850081,
+            comets_md5: "5d2fbd151550e78ca50bba360f44f741".to_string(),
+            continuous_preview: false,
+            goto_auto: false,
+            flat_auto_exp: false,
+            light_custom_exp: false,
+            flat_custom_exp: false,
+            dark_custom_exp: false,
+            bias_custom_exp: false,
+            bias_exposure: 10,
+            flat_exposure: 5,
+            light_exposure: 5,
+            dark_exposure: 5,
+            flat_bin: 1,
+            bias_bin: 1,
+            dark_bin: 1,
+            light_bin: 1,
+            main_camera_name: "ZWO ASI2600MC Pro".to_string(),
+            guide_rate: 0.5,
+            goto_target_dec: 0.0,
+            goto_target_ra: 0.0,
+            goto_target_name: "".to_string(),
+            guide_camera_name: "ZWO ASI462MM".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ConnectedCamera {
+    pub name: String,
+    pub id: u32,
+    pub path: String,
+    pub dslr: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "state")]
+pub enum CameraState {
+    #[serde(rename = "close")]
+    Close,
+    #[serde(rename = "idle")]
+    Idle{name: String, path: String},
+}
+
+#[derive(Debug, Clone)]
+pub struct ASIAirState {
+    pub name: String,
+    pub guid: String,
+    pub ip: String,
+    pub is_pi4: bool,
+    pub model: String,
+    pub ssid: String,
+    pub connect_lock: bool,
+
+    pub rtc: rtc::RTC,
+    pub language: String,
+
+    // get/set_app_state
+    pub app_state: AppState,
+
+    //get/set_app_setting
+    pub app_setting: AppSetting,
+
+    pub connected_cameras: Vec<ConnectedCamera>,
+
+    pub camera_state: CameraState,
 }
 
 
@@ -314,6 +470,36 @@ pub struct BinaryResult {
     pub height: u16,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CameraInfo {
+    pub chip_size: [u32; 2],
+    pub bins: Vec<u32>,
+    pub pixel_size_um: f32,
+    pub unity_gain: u32,
+    pub has_cooler: bool,
+    pub is_color: bool,
+    pub is_usb3_host: bool,
+    pub debayer_pattern: String,
+}
+
+pub static CAMERAS_INFO: Lazy<HashMap<&'static str, CameraInfo>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert("ZWO ASI2600MC Pro",
+        CameraInfo {
+            chip_size: [6248, 4176],
+            bins: vec![1, 2, 3, 4],
+            pixel_size_um: 3.76,
+            unity_gain: 0,
+            has_cooler: true,
+            is_color: true,
+            is_usb3_host: true,
+            debayer_pattern: "RG".to_string(),
+        },
+    );
+    m
+});
+
+
 impl ASIAirSim {
     pub fn new() -> Self {
         let local_ip = local_ip().unwrap_or_else(|_| "0.0.0.0".parse().unwrap());
@@ -330,63 +516,26 @@ impl ASIAirSim {
                 rtc: rtc::RTC::new(),
                 language: "en".to_string(),
 
-                page: ASIAirPage::Preview,
-                annotate: AnnotateState {
-                    is_working: false,
-                    lapse_ms: 0,
-                },
-                solve: SolveState {
-                    is_working: false,
-                    lapse_ms: 0,
-                    filename: "".to_string(),
-                },
-                capture: CaptureState {
-                    exposure_mode: ExposureModes::Single,
-                    is_working: false,
-                    state: CaptureStatus::Idle,
-                },
-                pa: PaState { is_working: false },
-                auto_goto: AutoGotoState { is_working: false },
-                stack: StackState {
-                    is_working: false,
-                    frame_type: FrameType::Light,
-                    stacked_frame: 0,
-                    dropped_frame: 0,
-                    total_frame: 0,
-                },
-                export_image: ExportImageState {
-                    is_working: false,
-                    success_frame: 0,
-                    total_frame: 0,
-                    keep: false,
-                    dst_storage: "".to_string(),
-                },
-                merid_flip: MeridFlipState { is_working: false },
-                auto_focus: AutoFocusState {
-                    result: AutoFocusResult {},
-                    is_working: false,
-                    focuser_opened: false,
-                    reason: AutoFocuserReason {
-                        comment: "manual".to_string(),
-                        code: 0,
+                app_state: AppState::default(),
+
+                app_setting: AppSetting::default(),
+
+                connected_cameras: vec![
+                    ConnectedCamera {
+                        name: "ZWO ASI2600MC Pro".to_string(),
+                        id: 0,
+                        path: "bus1.port:1,4,2,".to_string(),
+                        dslr: false,
                     },
-                },
-                find_star: FindStarState {
-                    is_working: false,
-                    lapse_ms: 0,
-                },
-                avi_record: AviRecordState {
-                    is_working: false,
-                    lapse_sec: 0,
-                    fps: 10.0,
-                    write_file_fps: 0.0,
-                },
-                rtmp: RtmpState { is_working: false },
-                auto_exp: AutoExpState { is_working: false },
-                restart_guide: RestartGuideState { is_working: false },
-                batch_stack: BatchStackState { is_working: false },
-                demonstrate: DemonstrateState { is_working: false },
-                format_drive: FormatDriveState { is_working: false },
+                    ConnectedCamera {
+                        name: "ZWO ASI462MM".to_string(),
+                        id: 1,
+                        path: "bus1.port:1,4,1,".to_string(),
+                        dslr: false,
+                    }
+                ],
+
+                camera_state: CameraState::Close,
             })),
             shutdown_tx: None,
         }

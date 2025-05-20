@@ -144,6 +144,7 @@ dependencies = [
  "env_logger",
  "local-ip-address",
  "log",
+ "once_cell",
  "rand 0.9.1",
  "serde",
  "serde_json",

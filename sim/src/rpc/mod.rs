@@ -32,6 +32,12 @@ pub fn asiair_tcp_handler(
         "set_setting" => misc_handlers::set_setting(params, state),
         "get_setting" => misc_handlers::get_setting(params, state),
         "get_app_state" => app_handlers::get_app_state(params, state),
+        "get_app_setting" => app_handlers::get_app_setting(params, state),
+        "get_connected_cameras" => app_handlers::get_connected_cameras(params, state),
+        "get_camera_state" => app_handlers::get_camera_state(params, state),
+        "open_camera" => app_handlers::open_camera(params, state),
+        "close_camera" => app_handlers::close_camera(params, state),
+        "get_camera_info" => app_handlers::get_camera_info(params, state),
         _ => (json!({ "error": format!("Unknown method: {}", method) }), 1),
     }
 }

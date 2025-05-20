@@ -184,6 +184,234 @@ async fn test_get_setting_request(stream: &mut TcpStream) {
     assert_eq!(response["code"], 0);
 }
 
+async fn test_get_app_setting_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_app_setting request
+    let request = json!({
+        "id": random_id,
+        "method": "get_app_setting",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_app_setting");
+    assert!(response["result"].is_object());
+    assert_eq!(response["code"], 0);
+}
+
+async fn test_get_app_state_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_app_state request
+    let request = json!({
+        "id": random_id,
+        "method": "get_app_state",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_app_state");
+    assert!(response["result"].is_object());
+    assert_eq!(response["code"], 0);
+}
+
+async fn test_get_connected_cameras_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_connected_cameras request
+    let request = json!({
+        "id": random_id,
+        "method": "get_connected_cameras",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_connected_cameras");
+    assert!(response["result"].is_array());
+    assert_eq!(response["code"], 0);
+}
+
+async fn test_get_camera_state_request(stream: &mut TcpStream, should_be_opened : bool) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_camera_state request
+    let request = json!({
+        "id": random_id,
+        "method": "get_camera_state",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_camera_state");
+    assert!(response["result"].is_object());
+    if should_be_opened {
+        assert_eq!(response["result"]["state"], "idle");
+    } else {
+        assert_eq!(response["result"]["state"], "close");
+    }
+    assert_eq!(response["code"], 0);
+}
+
+async fn test_open_camera_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a open_camera request
+    let request = json!({
+        "id": random_id,
+        "method": "open_camera",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "open_camera");
+    assert_eq!(response["code"], 0);
+}
+
+async fn test_close_camera_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a close_camera request
+    let request = json!({
+        "id": random_id,
+        "method": "close_camera",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "close_camera");
+    assert_eq!(response["code"], 0);
+}
+
+async fn test_get_camera_info_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_camera_info request
+    let request = json!({
+        "id": random_id,
+        "method": "get_camera_info",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_camera_info");
+    assert!(response["result"].is_object());
+    assert_eq!(response["code"], 0);
+}
+
+
 #[tokio::test]
 #[serial]
 async fn test_asiair_protocol() {
@@ -198,4 +426,12 @@ async fn test_asiair_protocol() {
     test_pi_set_time_request(&mut stream).await;
     test_set_setting_request(&mut stream).await;
     test_get_setting_request(&mut stream).await;
+    test_get_app_setting_request(&mut stream).await;
+    test_get_app_state_request(&mut stream).await;
+    test_get_connected_cameras_request(&mut stream).await;
+    test_open_camera_request(&mut stream).await;
+    test_get_camera_state_request(&mut stream, true).await;
+    test_close_camera_request(&mut stream).await;
+    test_get_camera_state_request(&mut stream, false).await;
+    test_get_camera_info_request(&mut stream).await;
 }
