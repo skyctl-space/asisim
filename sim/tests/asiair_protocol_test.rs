@@ -332,20 +332,21 @@ async fn test_open_camera_request(stream: &mut TcpStream) {
         .await
         .unwrap();
 
-    // Receive the response
-    let mut buf = [0u8; 2048];
-    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
-        .await
-        .unwrap()
-        .unwrap();
+    // Accumulate messages
+    let messages = accumulate_json_messages(stream, 2).await;
 
-    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
-
+    let response: Value = serde_json::from_slice(&messages[0]).unwrap();
+    println!("Response: {:?}", response);
     // Verify the response
     assert_eq!(response["id"], random_id);
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["method"], "open_camera");
     assert_eq!(response["code"], 0);
+
+    let event: Value = serde_json::from_slice(&messages[1]).unwrap();
+    println!("Event: {:?}", event);
+    // Verify the event
+    assert_eq!(event["Event"], "CameraStateChange");
 }
 
 async fn test_close_camera_request(stream: &mut TcpStream) {
@@ -363,20 +364,20 @@ async fn test_close_camera_request(stream: &mut TcpStream) {
         .await
         .unwrap();
 
-    // Receive the response
-    let mut buf = [0u8; 2048];
-    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
-        .await
-        .unwrap()
-        .unwrap();
+    let messages = accumulate_json_messages(stream, 2).await;
 
-    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
-
+    let response: Value = serde_json::from_slice(&messages[0]).unwrap();
+    println!("Response: {:?}", response);
     // Verify the response
     assert_eq!(response["id"], random_id);
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["method"], "close_camera");
     assert_eq!(response["code"], 0);
+
+    let event: Value = serde_json::from_slice(&messages[1]).unwrap();
+    println!("Event: {:?}", event);
+    // Verify the event
+    assert_eq!(event["Event"], "CameraStateChange");
 }
 
 async fn test_get_camera_info_request(stream: &mut TcpStream) {
@@ -411,6 +412,248 @@ async fn test_get_camera_info_request(stream: &mut TcpStream) {
     assert_eq!(response["code"], 0);
 }
 
+async fn test_get_control_value(stream: &mut TcpStream, control: &str, expect_error: bool, expect_type: &str) -> Option<f64> {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_control_value request
+    let request = json!({
+        "id": random_id,
+        "method": "get_control_value",
+        "params": [ control, true ],
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_control_value");
+    if expect_error {
+        println!("Response: {:?}", response);
+        assert_ne!(response["code"], 0);
+        assert!(response["error"].is_string());
+        return None;
+    } else {
+        println!("Response: {:?}", response);
+        assert_eq!(response["code"], 0);
+        assert_eq!(response["result"]["name"], control);
+        assert_eq!(response["result"]["type"], expect_type);
+        return Some(response["result"]["value"].as_f64().unwrap());
+    }
+}
+
+async fn test_get_control_value_request(stream: &mut TcpStream) {
+    test_get_control_value(stream, "Exposure", false, "number").await;
+    test_get_control_value(stream, "Temperature", false, "number").await;
+    test_get_control_value(stream, "CoolerOn", false, "number").await;
+    test_get_control_value(stream, "Gain", false, "number").await;
+    test_get_control_value(stream, "CoolPowerPerc", false, "number").await;
+    test_get_control_value(stream, "TargetTemp", false, "text").await;
+    test_get_control_value(stream, "AntiDewHeater", false, "number").await;
+    test_get_control_value(stream, "Red", false, "number").await;
+    test_get_control_value(stream, "Blue", false, "number").await;
+    test_get_control_value(stream, "LedOn", true, "number").await;
+    test_get_control_value(stream, "FanHalfSpeed", true, "number").await;
+    test_get_control_value(stream, "FrameSize", true, "number").await;
+}
+
+async fn test_set_control_value(stream: &mut TcpStream, control: &str, value: f64) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a set_control_value request
+    let request = json!({
+        "id": random_id,
+        "method": "set_control_value",
+        "params": [ control, value ],
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "set_control_value");
+    assert_eq!(response["code"], 0);
+    assert_eq!(response["result"], 0);
+}
+
+async fn test_set_control_value_request(stream: &mut TcpStream) {
+    let mut random_value: u64 = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "Exposure", random_value as f64).await;
+    let result = test_get_control_value(stream, "Exposure", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+
+    random_value = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "Temperature", random_value as f64).await;
+    let result = test_get_control_value(stream, "Temperature", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+
+    random_value = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "CoolerOn", random_value as f64).await;
+    let result = test_get_control_value(stream, "CoolerOn", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+
+    random_value = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "Gain", random_value as f64).await;
+    let result = test_get_control_value(stream, "Gain", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+    
+    random_value = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "CoolPowerPerc", random_value as f64).await;
+    let result = test_get_control_value(stream, "CoolPowerPerc", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+
+    random_value = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "TargetTemp", random_value as f64).await;
+    let result = test_get_control_value(stream, "TargetTemp", false, "text").await.unwrap();
+    assert_eq!(result, random_value as f64);
+
+    random_value = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "AntiDewHeater", random_value as f64).await;
+    let result = test_get_control_value(stream, "AntiDewHeater", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+    
+    random_value = rand::rng().random_range(1..1000);
+    test_set_control_value(stream, "Red", random_value as f64).await;
+    let result = test_get_control_value(stream, "Red", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+    random_value = rand::rng().random_range(1..1000);
+    
+    test_set_control_value(stream, "Blue", random_value as f64).await;
+    let result = test_get_control_value(stream, "Blue", false, "number").await.unwrap();
+    assert_eq!(result, random_value as f64);
+}
+
+async fn test_camera_bin_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a get_camera_bin request
+    let request = json!({
+        "id": random_id,
+        "method": "get_camera_bin",
+        "params": null,
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "get_camera_bin");
+    assert!(response["result"].is_number());
+    assert_eq!(response["code"], 0);
+}
+
+/// Accumulate and parse JSON messages from a stream, splitting by \r\n, until at least `count` messages are received.
+async fn accumulate_json_messages(stream: &mut TcpStream, count: usize) -> Vec<Vec<u8>> {
+    let mut buf = vec![0u8; 2048];
+    let mut total_len = 0;
+    loop {
+        let len = timeout(Duration::from_secs(2), stream.read(&mut buf[total_len..]))
+            .await
+            .unwrap()
+            .unwrap_or(0);
+        if len == 0 {
+            panic!("Connection closed before receiving all messages");
+        }
+        total_len += len;
+
+        // Try splitting the messages using \r\n
+        let raw = &buf[..total_len];
+        let parts = raw
+            .split(|b| b"\r\n".contains(b))
+            .filter(|slice| !slice.is_empty())
+            .map(|slice| slice.to_vec())
+            .collect::<Vec<_>>();
+
+        if parts.len() >= count {
+            return parts.into_iter().take(count).collect();
+        }
+
+        // Ensure buffer has enough room
+        if total_len >= buf.len() {
+            buf.resize(buf.len() * 2, 0);
+        }
+    }
+}
+
+async fn test_start_exposure_request(stream: &mut TcpStream) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a start_exposure request
+    let request = json!({
+        "id": random_id,
+        "method": "start_exposure",
+        "params": [ "light" ],
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    let messages = accumulate_json_messages(stream, 4).await;
+
+    // Verify the response
+    let response: Value = serde_json::from_slice(&messages[0]).unwrap();
+    println!("Response: {:?}", response);
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "start_exposure");
+    assert_eq!(response["code"], 0);
+
+    let event: Value = serde_json::from_slice(&messages[1]).unwrap();
+    assert_eq!(event["Event"], "Exposure");
+    assert_eq!(event["state"], "start");
+    println!("Event 1: {:?}", event);
+
+    let event: Value = serde_json::from_slice(&messages[2]).unwrap();
+    assert_eq!(event["Event"], "Exposure");
+    assert_eq!(event["state"], "downloading");
+    println!("Event 2: {:?}", event);
+
+    let event: Value = serde_json::from_slice(&messages[3]).unwrap();
+    assert_eq!(event["Event"], "Exposure");
+    assert_eq!(event["state"], "complete");
+    println!("Event 3: {:?}", event);
+}
+
 #[tokio::test]
 #[serial]
 async fn test_asiair_protocol() {
@@ -433,4 +676,8 @@ async fn test_asiair_protocol() {
     test_close_camera_request(&mut stream).await;
     test_get_camera_state_request(&mut stream, false).await;
     test_get_camera_info_request(&mut stream).await;
+    test_get_control_value_request(&mut stream).await;
+    test_set_control_value_request(&mut stream).await;
+    test_camera_bin_request(&mut stream).await;
+    test_start_exposure_request(&mut stream).await;
 }

@@ -152,17 +152,19 @@ pub struct PlateSolveEvent {
 #[allow(dead_code)]
 #[derive(Debug)]
 struct BinaryHeader {
-    magic0: u32,           // 0x00
-    magic1: u16,           // 0x04
-    pub payload_size: u32, // 0x06
-    unknown1: [u8; 5],     // 0x0A
-    pub id: u8,            // 0x0F
-    pub width: u16,        // 0x12
-    pub height: u16,       // 0x14
-    unknown2: u32,         // 0x16
-    unknown3: u32,         // 0x1A
-    unknown4: u32,         // 0x1C
-    padding: [u32; 12],    // 0x20
+    magic0: u32,           // 4 bytes
+    magic1: u16,           // 2 bytes
+    pub payload_size: u32, // 4 bytes
+    unknown1: [u8; 5],     // 5 bytes
+    pub id: u8,            // 1 byte
+    pub width: u16,        // 2 bytes
+    pub height: u16,       // 2 bytes
+    unknown2: u16,         // 2 bytes
+    unknown3: u32,      // 4 bytes
+    unknown4: u16,         // 2 bytes
+    pub bin: u16,              // 2 bytes
+    unknown5: u16,         // 2 bytes
+    padding: [u32; 12],    // 48 bytes (12 * 4)
 }
 
 impl BinaryHeader {
@@ -171,17 +173,16 @@ impl BinaryHeader {
         let magic1 = BigEndian::read_u16(&buf[4..6]);
         let payload_size = BigEndian::read_u32(&buf[6..10]);
 
-        let mut unknown1 = [0u8; 5];
-        unknown1.copy_from_slice(&buf[10..15]);
-
+        let unknown1 = [buf[10], buf[11], buf[12], buf[13], buf[14]];
         let id = buf[15];
         let width = BigEndian::read_u16(&buf[16..18]);
         let height = BigEndian::read_u16(&buf[18..20]);
-        let unknown2 = BigEndian::read_u32(&buf[20..24]);
-        let unknown3 = BigEndian::read_u32(&buf[24..28]);
-        let unknown4 = BigEndian::read_u32(&buf[28..32]);
 
-        let padding = [0u32; 12];
+        let unknown2 = BigEndian::read_u16(&buf[20..22]);
+        let unknown3 = BigEndian::read_u32(&buf[22..26]);
+        let unknown4 = BigEndian::read_u16(&buf[26..28]);
+        let bin = BigEndian::read_u16(&buf[28..30]);
+        let unknown5 = BigEndian::read_u16(&buf[30..34]);
 
         BinaryHeader {
             magic0,
@@ -194,7 +195,9 @@ impl BinaryHeader {
             unknown2,
             unknown3,
             unknown4,
-            padding,
+            bin,
+            unknown5,
+            padding: [0u32; 12],
         }
     }
 }

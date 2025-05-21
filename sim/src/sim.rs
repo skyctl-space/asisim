@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, UdpSocket};
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
+use serde_json::Value;
 
 use super::ASIAirSim;
 
@@ -386,6 +387,7 @@ pub static CAMERA_CONTROL_TYPES: Lazy<HashMap<&'static str, &'static str>> = Laz
     m.insert("AntiDewHeater", "number");
     m.insert("Red", "number");
     m.insert("Blue", "number");
+    m.insert("MonoBin", "number");
     m
 });
 
@@ -395,25 +397,27 @@ pub struct CameraControls {
     pub temperature: i32,
     pub gain: u32,
     pub cooler_on: u32,
-    pub cooler_power_perc: u32,
+    pub cool_power_perc: u32,
     pub target_temp: i32,
     pub anti_dew_heater: u32,
     pub red: u32,
     pub blue: u32,
+    pub mono_bin: u32,
 }
 
 impl Default for CameraControls {
     fn default() -> Self {
         CameraControls {
-            exposure: 0,
+            exposure: 1000,
             temperature: 0,
             gain: 0,
             cooler_on: 0,
-            cooler_power_perc: 0,
+            cool_power_perc: 0,
             target_temp: 0,
             anti_dew_heater: 0,
             red: 0,
             blue: 0,
+            mono_bin: 0,
         }
     }
 }
@@ -441,6 +445,7 @@ pub struct ASIAirState {
 
     pub camera_state: CameraState,
     pub camera_controls: CameraControls,
+    pub camera_bin: u32,
 }
 
 /// The 80-byte prefix format:
@@ -468,9 +473,11 @@ struct BinaryResponse {
     pub id: u8,            // 1 byte
     pub width: u16,        // 2 bytes
     pub height: u16,       // 2 bytes
-    unknown2: u32,         // 4 bytes
+    unknown2: u16,         // 2 bytes
     unknown3: u32,         // 4 bytes
-    unknown4: u32,         // 4 bytes
+    unknown4: u16,         // 2 bytes
+    pub bin: u16,              // 2 bytes
+    unknown5: u16,         // 2 bytes
     padding: [u32; 12],    // 48 bytes (12 * 4)
 }
 
@@ -480,13 +487,15 @@ impl Default for BinaryResponse {
             magic0: 0x03c30002,
             magic1: 0x0050,
             payload_size: 0,
-            unknown1: [0; 5],
+            unknown1: [50, 00, 00, 01, 03],
             id: 0,
             width: 0,
             height: 0,
             unknown2: 0,
-            unknown3: 0,
-            unknown4: 0,
+            unknown3: 1000,
+            unknown4: 1,
+            bin: 0,
+            unknown5: 0,
             padding: [0; 12],
         }
     }
@@ -505,9 +514,11 @@ impl BinaryResponse {
         WriteBytesExt::write_u8(&mut buf, self.id).unwrap();
         WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.width).unwrap();
         WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.height).unwrap();
-        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown2).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.unknown2).unwrap();
         WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown3).unwrap();
-        WriteBytesExt::write_u32::<BigEndian>(&mut buf, self.unknown4).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.unknown4).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.bin).unwrap();
+        WriteBytesExt::write_u16::<BigEndian>(&mut buf, self.unknown5).unwrap();
         for &pad in &self.padding {
             WriteBytesExt::write_u32::<BigEndian>(&mut buf, pad).unwrap();
         }
@@ -588,6 +599,7 @@ impl ASIAirSim {
 
                 camera_state: CameraState::Close,
                 camera_controls: CameraControls::default(),
+                camera_bin: 1,
             })),
             shutdown_tx: None,
         }
@@ -672,6 +684,7 @@ impl ASIAirSim {
                         match read_result {
                             Ok((mut stream, addr)) => {
                                 log::debug!("Received TCP connection from {}", addr);
+                                let (event_tx, mut event_rx) = mpsc::channel::<Value>(32);
 
                                 let tcp_state = tcp_state.clone();
                                 let mut per_connection_shutdown_rx = shutdown_rx.clone();
@@ -681,6 +694,12 @@ impl ASIAirSim {
                                         tokio::select! {
                                             _ = per_connection_shutdown_rx.changed() => {
                                                 break;
+                                            }
+                                            Some(event) = event_rx.recv() => {
+                                                let mut json = serde_json::to_string(&event).unwrap();
+                                                json.push_str("\r\n");
+                                                stream.write_all(json.as_bytes()).await.unwrap();
+                                                log::debug!("Sent Async Event to {}: {}", addr, json);
                                             }
                                             read_result = stream.read(&mut buf) => {
                                                 match read_result {
@@ -702,7 +721,7 @@ impl ASIAirSim {
                                                                         result: None,
                                                                     };
 
-                                                                    match asiair_tcp_handler(&req.method, &req.params, tcp_state.clone()) {
+                                                                    match asiair_tcp_handler(&req.method, &req.params, tcp_state.clone(), event_tx.clone()).await {
                                                                         Ok((result, code)) => {
                                                                             response.result = Some(result);
                                                                             response.code = code as u8;
@@ -787,7 +806,7 @@ impl ASIAirSim {
                                                                         result: None,
                                                                     };
 
-                                                                    match asiair_tcp_handler(&req.method, &req.params, tcp_state.clone()) {
+                                                                    match asiair_tcp_4500_handler(&req.method, &req.params, tcp_state.clone()) {
                                                                         Ok((result, code)) => {
                                                                             response.result = Some(result);
                                                                             response.code = code as u8;
@@ -868,6 +887,10 @@ impl ASIAirSim {
                                                                         header.payload_size = result.data.len() as u32;
                                                                         header.width = result.width;
                                                                         header.height = result.height;
+                                                                        {
+                                                                            let state = tcp_state.lock().unwrap();
+                                                                            header.bin = state.camera_bin as u16;
+                                                                        }
                                                                         let bytes = header.to_bytes();
 
                                                                         // Send the binary header first
