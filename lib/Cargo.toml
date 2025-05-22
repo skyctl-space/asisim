@@ -17,3 +17,4 @@ zip = "3.0.0"
 
 [dev-dependencies]
 asisim = { path = "../sim" }
+rand = "0.9.1"

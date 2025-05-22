@@ -1,13 +1,13 @@
 mod connection;
-mod img;
 mod settings;
+pub mod camera;
 
 use byteorder::{BigEndian, ByteOrder};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use std::sync::{Arc, Weak, Mutex, atomic::AtomicBool};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::Duration;
 
@@ -202,8 +202,20 @@ impl BinaryHeader {
     }
 }
 
+
+
+#[derive(Debug, Clone)]
+pub struct MainCamera {
+    tx_4700: Option<mpsc::Sender<ASIAirCommand>>,
+    tx_4800: Option<mpsc::Sender<ASIAirCommand>>,
+    // Time waiting for command response
+    cmd_timeout: Duration,
+    should_be_connected: Arc<AtomicBool>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ASIAir {
+    main_camera: Option<MainCamera>,
     // The address of the ASIAir device
     pub addr: Ipv4Addr,
     // Time waiting for command response
@@ -234,6 +246,7 @@ pub struct ASIAir {
     // Publicly accessible channel for connection state
     pub connection_state_tx: watch::Sender<bool>,
     pub camera_temperature_tx: watch::Sender<f32>,
+    pub camera_state_change_tx: watch::Sender<()>,
     pub cooler_power_tx: watch::Sender<i32>,
     pub camera_control_change_tx: watch::Sender<()>,
     pub exposure_change_tx: watch::Sender<ExposureChangeEvent>,

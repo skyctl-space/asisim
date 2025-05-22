@@ -90,27 +90,47 @@ pub fn get_control_value(
                 }
                 let control_type = CAMERA_CONTROL_TYPES.get(control_name).unwrap();
 
-                let value: f64 = match control_name {
-                    "Exposure" => state.camera_controls.exposure as f64,
-                    "Gain" => state.camera_controls.gain.into(),
-                    "CoolerOn" => state.camera_controls.cooler_on.into(),
-                    "Temperature" => state.camera_controls.temperature.into(),
-                    "CoolPowerPerc" => state.camera_controls.cool_power_perc.into(),
-                    "TargetTemp" => state.camera_controls.target_temp.into(),
-                    "AntiDewHeater" => state.camera_controls.anti_dew_heater.into(),
-                    "Red" => state.camera_controls.red.into(),
-                    "Blue" => state.camera_controls.blue.into(),
-                    "MonoBin" => state.camera_controls.mono_bin.into(),
+                match *control_type {
+                    "number" => {
+                        let value: i64 = match control_name {
+                            "Exposure" => state.camera_controls.exposure,
+                            "Gain" => state.camera_controls.gain,
+                            "CoolerOn" => state.camera_controls.cooler_on,
+                            "CoolPowerPerc" => state.camera_controls.cool_power_perc,
+                            "Temperature" => state.camera_controls.temperature,
+                            "AntiDewHeater" => state.camera_controls.anti_dew_heater,
+                            "Red" => state.camera_controls.red,
+                            "Blue" => state.camera_controls.blue,
+                            "MonoBin" => state.camera_controls.mono_bin,
+                            _ => {
+                                return Err(("unexpected param".to_string(), 1));
+                            }
+                        };
+
+                        return Ok((json!({
+                            "name": control_name,
+                            "type": control_type,
+                            "value": value,
+                        }), 0));
+                    }
+                    "text" => {
+                        let value: f64 = match control_name {
+                            "TargetTemp" => state.camera_controls.target_temp,
+                            _ => {
+                                return Err(("unexpected param".to_string(), 1));
+                            }
+                        };
+
+                        return Ok((json!({
+                            "name": control_name,
+                            "type": control_type,
+                            "value": value,
+                        }), 0));
+                    }
                     _ => {
                         return Err(("unexpected param".to_string(), 1));
                     }
-                };
-
-                return Ok((json!({
-                    "name": control_name,
-                    "type": control_type,
-                    "value": value,
-                }), 0));
+                }
             }
 
             return Err(("unknown control name".to_string(), 1));
@@ -134,71 +154,64 @@ pub fn set_control_value(
                 Some(control_name) => {
                     match control_name {
                         "Exposure" => {
-                            if let Some(exposure) = value[1].as_f64() {
-                                state.camera_controls.exposure = exposure as u64;
+                            if let Some(exposure) = value[1].as_i64() {
+                                state.camera_controls.exposure = exposure;
                             } else {
                                 return Err(("invalid exposure value".to_string(), 1));
                             }
                         }
                         "Gain" => {
-                            if let Some(gain) = value[1].as_f64() {
-                                state.camera_controls.gain = gain as u32;
+                            if let Some(gain) = value[1].as_i64() {
+                                state.camera_controls.gain = gain;
                             } else {
                                 return Err(("invalid gain value".to_string(), 1));
                             }
                         }
                         "CoolerOn" => {
-                            if let Some(cooler_on) = value[1].as_f64() {
-                                state.camera_controls.cooler_on = cooler_on as u32;
+                            if let Some(cooler_on) = value[1].as_i64() {
+                                state.camera_controls.cooler_on = cooler_on;
                             } else {
                                 return Err(("invalid cooler_on value".to_string(), 1));
                             }
                         }
-                        "Temperature" => {
-                            if let Some(temperature) = value[1].as_f64() {
-                                state.camera_controls.temperature = temperature as i32;
-                            } else {
-                                return Err(("invalid temperature value".to_string(), 1));
-                            }
-                        }
                         "CoolPowerPerc" => {
-                            if let Some(cool_power_perc) = value[1].as_f64() {
-                                state.camera_controls.cool_power_perc = cool_power_perc as u32;
+                            if let Some(cool_power_perc) = value[1].as_i64() {
+                                state.camera_controls.cool_power_perc = cool_power_perc;
                             } else {
                                 return Err(("invalid cool_power_perc value".to_string(), 1));
                             }
                         }
                         "TargetTemp" => {
                             if let Some(target_temp) = value[1].as_f64() {
-                                state.camera_controls.target_temp = target_temp as i32;
+                                state.camera_controls.target_temp = target_temp;
                             } else {
                                 return Err(("invalid target_temp value".to_string(), 1));
                             }
                         }
                         "AntiDewHeater" => {
-                            if let Some(anti_dew_heater) = value[1].as_f64() {
-                                state.camera_controls.anti_dew_heater = anti_dew_heater as u32;
+                            if let Some(anti_dew_heater) = value[1].as_i64() {
+                                state.camera_controls.anti_dew_heater = anti_dew_heater;
                             } else {
                                 return Err(("invalid anti_dew_heater value".to_string(), 1));
                             }
                         }
                         "Red" => {
-                            if let Some(red) = value[1].as_f64() {
-                                state.camera_controls.red = red as u32;
+                            if let Some(red) = value[1].as_i64() {
+                                state.camera_controls.red = red;
                             } else {
                                 return Err(("invalid red value".to_string(), 1));
                             }
                         }
                         "Blue" => {
-                            if let Some(blue) = value[1].as_f64() {
-                                state.camera_controls.blue = blue as u32;
+                            if let Some(blue) = value[1].as_i64() {
+                                state.camera_controls.blue = blue;
                             } else {
                                 return Err(("invalid blue value".to_string(), 1));
                             }
                         }
                         "MonoBin" => {
-                            if let Some(mono_bin) = value[1].as_f64() {
-                                state.camera_controls.mono_bin = mono_bin as u32;
+                            if let Some(mono_bin) = value[1].as_i64() {
+                                state.camera_controls.mono_bin = mono_bin;
                             } else {
                                 return Err(("invalid mono_bin value".to_string(), 1));
                             }
@@ -254,8 +267,8 @@ pub async fn start_exposure(
     state: Arc<Mutex<ASIAirState>>,
     event_tx: tokio::sync::mpsc::Sender<Value>
 ) -> Result<(Value, u8), (String, u8)> {
-    let exposure_us: u64;
-    let gain: u32;
+    let exposure_us: i64;
+    let gain: i64;
     let page: String;
 
     {
@@ -284,7 +297,7 @@ pub async fn start_exposure(
                             })).await;
 
                             tokio::spawn(async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(exposure_us / 1000)).await;
+                                tokio::time::sleep(std::time::Duration::from_millis((exposure_us / 1000).try_into().unwrap())).await;
 
                                 let _ = event_tx.send(json!({
                                     "Event": "Exposure",

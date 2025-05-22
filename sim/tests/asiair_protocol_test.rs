@@ -469,7 +469,39 @@ async fn test_get_control_value_request(stream: &mut TcpStream) {
     test_get_control_value(stream, "FrameSize", true, "number").await;
 }
 
-async fn test_set_control_value(stream: &mut TcpStream, control: &str, value: f64) {
+async fn test_set_control_value(stream: &mut TcpStream, control: &str, value: i64) {
+    // Generate a random ID for the request
+    let random_id: u64 = rand::rng().random_range(1..1000);
+
+    // Send a set_control_value request
+    let request = json!({
+        "id": random_id,
+        "method": "set_control_value",
+        "params": [ control, value ],
+    });
+    stream
+        .write_all(request.to_string().as_bytes())
+        .await
+        .unwrap();
+
+    // Receive the response
+    let mut buf = [0u8; 2048];
+    let len = timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let response: Value = serde_json::from_slice(&buf[..len]).unwrap();
+
+    // Verify the response
+    assert_eq!(response["id"], random_id);
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["method"], "set_control_value");
+    assert_eq!(response["code"], 0);
+    assert_eq!(response["result"], 0);
+}
+
+async fn test_set_control_value_f(stream: &mut TcpStream, control: &str, value: f64) {
     // Generate a random ID for the request
     let random_id: u64 = rand::rng().random_range(1..1000);
 
@@ -503,47 +535,42 @@ async fn test_set_control_value(stream: &mut TcpStream, control: &str, value: f6
 
 async fn test_set_control_value_request(stream: &mut TcpStream) {
     let mut random_value: u64 = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "Exposure", random_value as f64).await;
+    test_set_control_value(stream, "Exposure", random_value as i64).await;
     let result = test_get_control_value(stream, "Exposure", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
 
     random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "Temperature", random_value as f64).await;
-    let result = test_get_control_value(stream, "Temperature", false, "number").await.unwrap();
-    assert_eq!(result, random_value as f64);
-
-    random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "CoolerOn", random_value as f64).await;
+    test_set_control_value(stream, "CoolerOn", random_value as i64).await;
     let result = test_get_control_value(stream, "CoolerOn", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
 
     random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "Gain", random_value as f64).await;
+    test_set_control_value(stream, "Gain", random_value as i64).await;
     let result = test_get_control_value(stream, "Gain", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
     
     random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "CoolPowerPerc", random_value as f64).await;
+    test_set_control_value(stream, "CoolPowerPerc", random_value as i64).await;
     let result = test_get_control_value(stream, "CoolPowerPerc", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
 
     random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "TargetTemp", random_value as f64).await;
+    test_set_control_value_f(stream, "TargetTemp", random_value as f64).await;
     let result = test_get_control_value(stream, "TargetTemp", false, "text").await.unwrap();
     assert_eq!(result, random_value as f64);
 
     random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "AntiDewHeater", random_value as f64).await;
+    test_set_control_value(stream, "AntiDewHeater", random_value as i64).await;
     let result = test_get_control_value(stream, "AntiDewHeater", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
     
     random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "Red", random_value as f64).await;
+    test_set_control_value(stream, "Red", random_value as i64).await;
     let result = test_get_control_value(stream, "Red", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
     random_value = rand::rng().random_range(1..1000);
     
-    test_set_control_value(stream, "Blue", random_value as f64).await;
+    test_set_control_value(stream, "Blue", random_value as i64).await;
     let result = test_get_control_value(stream, "Blue", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
 }

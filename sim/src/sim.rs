@@ -393,16 +393,16 @@ pub static CAMERA_CONTROL_TYPES: Lazy<HashMap<&'static str, &'static str>> = Laz
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CameraControls {
-    pub exposure: u64,
-    pub temperature: i32,
-    pub gain: u32,
-    pub cooler_on: u32,
-    pub cool_power_perc: u32,
-    pub target_temp: i32,
-    pub anti_dew_heater: u32,
-    pub red: u32,
-    pub blue: u32,
-    pub mono_bin: u32,
+    pub exposure: i64,
+    pub temperature: i64,
+    pub gain: i64,
+    pub cooler_on: i64,
+    pub cool_power_perc: i64,
+    pub target_temp: f64,
+    pub anti_dew_heater: i64,
+    pub red: i64,
+    pub blue: i64,
+    pub mono_bin: i64,
 }
 
 impl Default for CameraControls {
@@ -413,7 +413,7 @@ impl Default for CameraControls {
             gain: 0,
             cooler_on: 0,
             cool_power_perc: 0,
-            target_temp: 0,
+            target_temp: 0.0,
             anti_dew_heater: 0,
             red: 0,
             blue: 0,

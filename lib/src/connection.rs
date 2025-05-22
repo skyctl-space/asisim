@@ -26,12 +26,14 @@ impl ASIAir {
         let (camera_temperature_tx, _) = watch::channel(0.0);
         let (cooler_power_tx, _) = watch::channel(0);
         let (camera_control_change_tx, _) = watch::channel(());
+        let (camera_state_change_tx, _) = watch::channel(());
         let (exposure_change_tx, _) = watch::channel(ExposureChangeEvent::default());
         let (pi_status_tx, _) = watch::channel(PiStatusEvent::default());
         let (annotate_tx, _) = watch::channel(AnnotateEvent::default());
         let (plate_solve_tx, _) = watch::channel(PlateSolveEvent::default());
 
         ASIAir {
+            main_camera: None,
             addr,
             cmd_timeout: Duration::from_secs(5),
             tx_4500: None,
@@ -46,6 +48,7 @@ impl ASIAir {
             connected: Arc::new(AtomicBool::new(false)),
             connection_state_tx,
             camera_temperature_tx,
+            camera_state_change_tx,
             cooler_power_tx,
             camera_control_change_tx,
             exposure_change_tx,
@@ -121,6 +124,7 @@ impl ASIAir {
         let camera_temperature_tx = self.camera_temperature_tx.clone();
         let cooler_power_tx = self.cooler_power_tx.clone();
         let camera_control_change_tx = self.camera_control_change_tx.clone();
+        let camera_state_change_tx = self.camera_state_change_tx.clone();
         let exposure_change_tx = self.exposure_change_tx.clone();
         let pi_status_tx = self.pi_status_tx.clone();
         let annotate_tx = self.annotate_tx.clone();
@@ -198,6 +202,9 @@ impl ASIAir {
                                                 },
                                                 Some("CameraControlChange") => {
                                                     let _ = camera_control_change_tx.send(());
+                                                },
+                                                Some("CameraStateChange") => {
+                                                    let _ = camera_state_change_tx.send(());
                                                 },
                                                 Some("Exposure") => {
                                                     if let Some(exp_us) = response.get("exp_us").and_then(|r| r.as_u64()) {
@@ -535,6 +542,10 @@ impl ASIAir {
 
     pub fn subscribe_camera_temperature(&self) -> watch::Receiver<f32> {
         self.camera_temperature_tx.subscribe()
+    }
+
+    pub fn subscribe_camera_state_change(&self) -> watch::Receiver<()> {
+        self.camera_state_change_tx.subscribe()
     }
 
     pub fn subscribe_cooler_power(&self) -> watch::Receiver<i32> {
