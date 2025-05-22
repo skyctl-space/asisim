@@ -114,6 +114,9 @@ mod tests {
         let bin_state = main_camera.get_bin().await.unwrap();
         assert_eq!(bin_state, bin);
 
+        main_camera.start_exposure().await.unwrap();
+        main_camera.get_current_img().await.unwrap();
+
         // Final cleanup
         asiair.disconnect().await;
         asiair_sim.shutdown();

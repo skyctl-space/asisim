@@ -76,6 +76,15 @@ impl CameraControl {
 }
 
 impl MainCamera {
+    pub async fn start_exposure(
+        &mut self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let method = "start_exposure";
+        let params = Some(serde_json::json!([ "light" ]));
+        self.rpc_request_4700(method, params).await?;
+        Ok(())
+    }
+
     pub async fn get_info(&self) -> Result<CameraInfo, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_camera_info";
         let result = self.rpc_request_4700(method, None).await?;
