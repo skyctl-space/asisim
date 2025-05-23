@@ -21,7 +21,7 @@ pub fn set_app_setting(
     let mut state = state.lock().unwrap();
 
     if let Some(params) = params {
-       for (key, value) in params.as_object().unwrap() {
+       for (key, value) in params[0].as_object().unwrap() {
             match key.as_str() {
                 "main_camera_name" => {
                     state.app_setting.main_camera_name = serde_json::from_value(value.clone()).unwrap();

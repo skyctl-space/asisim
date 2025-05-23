@@ -111,7 +111,7 @@ impl ASIAir {
         Ok(camera_name)
     }
 
-    pub async fn guide_camera_set(
+    pub async fn guide_camera_set_name(
         &mut self,
         camera_name: String,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -120,6 +120,16 @@ impl ASIAir {
         self.rpc_request_4700(method, params).await?;
 
         Ok(())
+    }
+
+    pub async fn guide_camera_get_name(
+        &mut self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let method = "get_app_setting";
+        let result = self.rpc_request_4700(method, None).await?;
+
+        let camera_name: String = serde_json::from_value(result["guide_camera_name"].clone())?;
+        Ok(camera_name)
     }
 
     pub async fn main_camera_open(

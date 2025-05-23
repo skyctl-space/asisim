@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::sync::{Arc, Weak, Mutex, atomic::AtomicBool};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::Duration;
 
