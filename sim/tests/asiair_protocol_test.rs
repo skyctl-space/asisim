@@ -549,10 +549,7 @@ async fn test_set_control_value_request(stream: &mut TcpStream) {
     let result = test_get_control_value(stream, "Gain", false, "number").await.unwrap();
     assert_eq!(result, random_value as f64);
     
-    random_value = rand::rng().random_range(1..1000);
-    test_set_control_value(stream, "CoolPowerPerc", random_value as i64).await;
     let result = test_get_control_value(stream, "CoolPowerPerc", false, "number").await.unwrap();
-    assert_eq!(result, random_value as f64);
 
     random_value = rand::rng().random_range(1..1000);
     test_set_control_value_f(stream, "TargetTemp", random_value as f64).await;

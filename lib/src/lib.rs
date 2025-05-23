@@ -203,19 +203,8 @@ impl BinaryHeader {
 }
 
 
-
-#[derive(Debug, Clone)]
-pub struct MainCamera {
-    tx_4700: Option<mpsc::Sender<ASIAirCommand>>,
-    tx_4800: Option<mpsc::Sender<ASIAirCommand>>,
-    // Time waiting for command response
-    cmd_timeout: Duration,
-    should_be_connected: Arc<AtomicBool>,
-}
-
 #[derive(Debug, Clone)]
 pub struct ASIAir {
-    main_camera: Option<MainCamera>,
     // The address of the ASIAir device
     pub addr: Ipv4Addr,
     // Time waiting for command response

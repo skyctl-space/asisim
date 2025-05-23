@@ -1,11 +1,5 @@
 use super::ASIAir;
-use super::MainCamera;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use super::ASIAirCommand;
-use super::BinaryResult;
-use tokio::sync::oneshot;
-use std::sync::atomic::Ordering;
 use std::io::Cursor;
 use std::io::Read;
 use zip::ZipArchive;
@@ -75,8 +69,79 @@ impl CameraControl {
     }
 }
 
-impl MainCamera {
-    pub async fn start_exposure(
+impl ASIAir {
+    pub async fn get_connected_cameras(
+        &mut self,
+    ) -> Result<Vec<ConnectedCamera>, Box<dyn std::error::Error + Send + Sync>> {
+        let method = "get_connected_cameras";
+        let result = self.rpc_request_4700(method, None).await?;
+
+        let cameras: Vec<ConnectedCamera> = serde_json::from_value(result)?;
+        Ok(cameras)
+    }
+
+    pub async fn main_camera_get_state(
+        &mut self
+    ) -> Result<CameraState, Box<dyn std::error::Error + Send + Sync>> {
+        let method = "get_camera_state";
+        let result = self.rpc_request_4700(method, None).await?;
+
+        let state: CameraState = serde_json::from_value(result)?;
+        Ok(state)
+    }
+
+    pub async fn main_camera_set_name(
+        &mut self,
+        camera_name: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let method = "set_app_setting";
+        let params = Some(serde_json::json!([ { "main_camera_name" : camera_name }]));
+        self.rpc_request_4700(method, params).await?;
+
+        Ok(())
+    }
+
+    pub async fn main_camera_get_name(
+        &mut self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let method = "get_app_setting";
+        let result = self.rpc_request_4700(method, None).await?;
+
+        let camera_name: String = serde_json::from_value(result["main_camera_name"].clone())?;
+        Ok(camera_name)
+    }
+
+    pub async fn guide_camera_set(
+        &mut self,
+        camera_name: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let method = "set_app_setting";
+        let params = Some(serde_json::json!([ { "guide_camera_name" : camera_name }]));
+        self.rpc_request_4700(method, params).await?;
+
+        Ok(())
+    }
+
+    pub async fn main_camera_open(
+        &mut self
+        //camera: ConnectedCamera
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let method = "open_camera";
+        self.rpc_request_4700(method, None).await?;
+
+        Ok(())
+    }
+
+    pub async fn main_camera_close(
+        &mut self
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let method = "close_camera";
+        self.rpc_request_4700(method, None).await?;
+
+        Ok(())
+    }
+
+    pub async fn main_camera_start_exposure(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let method = "start_exposure";
@@ -85,7 +150,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_info(&self) -> Result<CameraInfo, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn main_camera_get_info(&self) -> Result<CameraInfo, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_camera_info";
         let result = self.rpc_request_4700(method, None).await?;
 
@@ -93,7 +158,7 @@ impl MainCamera {
         return Ok(info);
     }
 
-    pub async fn get_exposure(
+    pub async fn main_camera_get_exposure(
         &mut self
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -104,7 +169,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_exposure(
+    pub async fn main_camera_set_exposure(
         &mut self,
         exposure: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -114,7 +179,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_temperature(
+    pub async fn main_camera_get_temperature(
         &mut self
     ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -125,7 +190,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn get_cooler(
+    pub async fn main_camera_get_cooler(
         &mut self
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -137,7 +202,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_cooler(
+    pub async fn main_camera_set_cooler(
         &mut self,
         cooler_on: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -148,7 +213,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_gain(
+    pub async fn main_camera_get_gain(
         &mut self
     ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -159,7 +224,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_gain(
+    pub async fn main_camera_set_gain(
         &mut self,
         gain: i64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -169,7 +234,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_cooler_percentage(
+    pub async fn main_camera_get_cooler_percentage(
         &mut self
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -180,17 +245,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_cooler_percentage(
-        &mut self,
-        cooler_percentage: u64,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let method = "set_control_value";
-        let params = Some(serde_json::json!([ CameraControl::CoolPowerPerc.to_str(), cooler_percentage ]));
-        self.rpc_request_4700(method, params).await?;
-        Ok(())
-    }
-
-    pub async fn get_target_temperature(
+    pub async fn main_camera_get_target_temperature(
         &mut self
     ) -> Result<f64, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -201,7 +256,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_target_temperature(
+    pub async fn main_camera_set_target_temperature(
         &mut self,
         target_temperature: f64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -211,7 +266,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_anti_dew_heater(
+    pub async fn main_camera_get_anti_dew_heater(
         &mut self
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -223,7 +278,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_anti_dew_heater(
+    pub async fn main_camera_set_anti_dew_heater(
         &mut self,
         anti_dew_heater: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -234,7 +289,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_red_gain(
+    pub async fn main_camera_get_red_gain(
         &mut self
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -245,7 +300,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_red_gain(
+    pub async fn main_camera_set_red_gain(
         &mut self,
         red_gain: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -255,7 +310,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_blue_gain(
+    pub async fn main_camera_get_blue_gain(
         &mut self
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -266,7 +321,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_blue_gain(
+    pub async fn main_camera_set_blue_gain(
         &mut self,
         blue_gain: u64,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -276,7 +331,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_mono_bin(
+    pub async fn main_camera_get_mono_bin(
         &mut self
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_control_value";
@@ -288,7 +343,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_mono_bin(
+    pub async fn main_camera_set_mono_bin(
         &mut self,
         mono_bin: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -299,7 +354,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_bin(
+    pub async fn main_camera_get_bin(
         &mut self
     ) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_camera_bin";
@@ -309,7 +364,7 @@ impl MainCamera {
         Ok(value)
     }
 
-    pub async fn set_bin(
+    pub async fn main_camera_set_bin(
         &mut self,
         bin: u32,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -319,7 +374,7 @@ impl MainCamera {
         Ok(())
     }
 
-    pub async fn get_current_img(
+    pub async fn main_camera_get_current_img(
         &mut self,
     ) -> Result<(Vec<u8>, u16, u16), Box<dyn std::error::Error + Send + Sync>> {
         let method = "get_current_img";
@@ -337,115 +392,6 @@ impl MainCamera {
         file.read_to_end(&mut extracted_data)?;
 
         return Ok((extracted_data, result.width, result.height));
-    }
-
-    pub async fn rpc_request_4700(
-        &self,
-        method: &str,
-        params: Option<Value>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        if !self.should_be_connected.load(Ordering::SeqCst) {
-            return Err("Not connected".into());
-        }
-        if let Some(tx) = &self.tx_4700 {
-            let (response_tx, response_rx) = oneshot::channel();
-            let command = ASIAirCommand::Get {
-                method: method.to_string(),
-                params,
-                tx: response_tx,
-            };
-            tx.send(command).await.unwrap();
-
-            // Wait for the response with a timeout
-            match tokio::time::timeout(self.cmd_timeout, response_rx).await {
-                Ok(Ok(response)) => response,
-                Ok(Err(_)) | Err(_) => Err("Failed to get response".into()),
-            }
-        } else {
-            Err("Not connected".into())
-        }
-    }
-
-    pub async fn rpc_request_4800(
-        &self,
-        method: &str,
-        params: Option<Value>,
-    ) -> Result<BinaryResult, Box<dyn std::error::Error + Send + Sync>> {
-        if !self.should_be_connected.load(Ordering::SeqCst) {
-            return Err("Not connected".into());
-        }
-        if let Some(tx) = &self.tx_4800 {
-            let (response_tx, response_rx) = oneshot::channel();
-            let command = ASIAirCommand::BinaryGet {
-                method: method.to_string(),
-                params,
-                tx: response_tx,
-            };
-            tx.send(command).await.unwrap();
-
-            // Wait for the response with a timeout
-            match tokio::time::timeout(self.cmd_timeout, response_rx).await {
-                Ok(Ok(result)) => result,
-                Ok(Err(_)) | Err(_) => Err("Failed to get response".into()),
-            }
-        } else {
-            Err("Not connected".into())
-        }
-    }
-}
-
-
-impl ASIAir {
-    pub fn get_main_camera(&self) -> Option<MainCamera> {
-        self.main_camera.clone()
-    }
-
-    pub async fn get_connected_cameras(
-        &mut self,
-    ) -> Result<Vec<ConnectedCamera>, Box<dyn std::error::Error + Send + Sync>> {
-        let method = "get_connected_cameras";
-        let result = self.rpc_request_4700(method, None).await?;
-
-        let cameras: Vec<ConnectedCamera> = serde_json::from_value(result)?;
-        Ok(cameras)
-    }
-
-    async fn get_camera_state(
-        &mut self
-    ) -> Result<CameraState, Box<dyn std::error::Error + Send + Sync>> {
-        let method = "get_camera_state";
-        let result = self.rpc_request_4700(method, None).await?;
-
-        let state: CameraState = serde_json::from_value(result)?;
-        Ok(state)
-    }
-
-    pub async fn open_main_camera(
-        &mut self
-        //camera: ConnectedCamera
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let method = "open_camera";
-        self.rpc_request_4700(method, None).await?;
-
-        self.main_camera = Some(MainCamera {
-            tx_4700: self.tx_4700.clone(),
-            tx_4800: self.tx_4800.clone(),
-            cmd_timeout: self.cmd_timeout,
-            should_be_connected: self.should_be_connected.clone(),
-        });
-
-        Ok(())
-    }
-
-    pub async fn close_main_camera(
-        &mut self
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let method = "close_camera";
-        self.rpc_request_4700(method, None).await?;
-
-        self.main_camera = None;
-
-        Ok(())
     }
 }
 

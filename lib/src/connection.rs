@@ -33,7 +33,6 @@ impl ASIAir {
         let (plate_solve_tx, _) = watch::channel(PlateSolveEvent::default());
 
         ASIAir {
-            main_camera: None,
             addr,
             cmd_timeout: Duration::from_secs(5),
             tx_4500: None,

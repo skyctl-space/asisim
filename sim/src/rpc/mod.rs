@@ -35,6 +35,7 @@ pub async fn asiair_tcp_handler(
         "get_setting" => misc_handlers::get_setting(params, state),
         "get_app_state" => app_handlers::get_app_state(params, state),
         "get_app_setting" => app_handlers::get_app_setting(params, state),
+        "set_app_setting" => app_handlers::set_app_setting(params, state),
         "get_connected_cameras" => camera_handlers::get_connected_cameras(params, state),
         "get_camera_state" => camera_handlers::get_camera_state(params, state),
         "open_camera" => camera_handlers::open_camera(params, state, event_tx).await,
