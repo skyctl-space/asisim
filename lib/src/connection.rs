@@ -15,8 +15,7 @@ use super::ASIAirPage;
 use super::AnnotateEvent;
 use super::BinaryHeader;
 use super::BinaryResult;
-use super::EventState;
-use super::ExposureChangeEvent;
+use super::ExposureEvent;
 use super::PiStatusEvent;
 use super::PlateSolveEvent;
 
@@ -27,7 +26,7 @@ impl ASIAir {
         let (cooler_power_tx, _) = watch::channel(0);
         let (camera_control_change_tx, _) = watch::channel(());
         let (camera_state_change_tx, _) = watch::channel(());
-        let (exposure_change_tx, _) = watch::channel(ExposureChangeEvent::default());
+        let (exposure_tx, _) = watch::channel(ExposureEvent::default());
         let (pi_status_tx, _) = watch::channel(PiStatusEvent::default());
         let (annotate_tx, _) = watch::channel(AnnotateEvent::default());
         let (plate_solve_tx, _) = watch::channel(PlateSolveEvent::default());
@@ -50,7 +49,7 @@ impl ASIAir {
             camera_state_change_tx,
             cooler_power_tx,
             camera_control_change_tx,
-            exposure_change_tx,
+            exposure_tx,
             pi_status_tx,
             annotate_tx,
             plate_solve_tx,
@@ -124,7 +123,7 @@ impl ASIAir {
         let cooler_power_tx = self.cooler_power_tx.clone();
         let camera_control_change_tx = self.camera_control_change_tx.clone();
         let camera_state_change_tx = self.camera_state_change_tx.clone();
-        let exposure_change_tx = self.exposure_change_tx.clone();
+        let exposure_tx = self.exposure_tx.clone();
         let pi_status_tx = self.pi_status_tx.clone();
         let annotate_tx = self.annotate_tx.clone();
         let plate_solve_tx = self.plate_solve_tx.clone();
@@ -206,23 +205,29 @@ impl ASIAir {
                                                     let _ = camera_state_change_tx.send(());
                                                 },
                                                 Some("Exposure") => {
-                                                    if let Some(exp_us) = response.get("exp_us").and_then(|r| r.as_u64()) {
-                                                        if let Some(gain) = response.get("gain").and_then(|r| r.as_u64()) {
-                                                            if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
-                                                                if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
-                                                                    if let Ok(state) = EventState::from_str(state) {
+                                                    match response.get("state").and_then(|r| r.as_str()) {
+                                                        Some("start") => {
+                                                            if let Some(exp_us) = response.get("exp_us").and_then(|r| r.as_u64()) {
+                                                                if let Some(gain) = response.get("gain").and_then(|r| r.as_u64()) {
+                                                                    if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
                                                                         if let Ok(page) = ASIAirPage::from_str(page) {
-                                                                            let _ = exposure_change_tx.send(ExposureChangeEvent {
+                                                                            let _ = exposure_tx.send(ExposureEvent::Start {
                                                                                 page: page,
-                                                                                state: state,
                                                                                 exp_us: exp_us,
-                                                                                gain: gain as u32,
+                                                                                gain: gain as u64,
                                                                             });
                                                                         }
                                                                     }
                                                                 }
                                                             }
+                                                        },
+                                                        Some("complete") => {
+                                                            let _ = exposure_tx.send(ExposureEvent::Complete);
+                                                        },
+                                                        Some("downloading") => {
+                                                            let _ = exposure_tx.send(ExposureEvent::Downloading);
                                                         }
+                                                        _ => {}
                                                     }
                                                 },
                                                 Some("PiStatus") => {
@@ -245,14 +250,12 @@ impl ASIAir {
                                                     if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
                                                         if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
                                                             if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
-                                                                if let Ok(state) = EventState::from_str(state) {
-                                                                    if let Ok(page) = ASIAirPage::from_str(page) {
-                                                                        let _ = annotate_tx.send(AnnotateEvent {
-                                                                            page: page,
-                                                                            tag: tag.to_string(),
-                                                                            state: state,
-                                                                        });
-                                                                    }
+                                                                if let Ok(page) = ASIAirPage::from_str(page) {
+                                                                    let _ = annotate_tx.send(AnnotateEvent {
+                                                                        page: page,
+                                                                        tag: tag.to_string(),
+                                                                        state: state.to_string(),
+                                                                    });
                                                                 }
                                                             }
                                                         }
@@ -262,14 +265,12 @@ impl ASIAir {
                                                     if let Some(page) = response.get("page").and_then(|r| r.as_str()) {
                                                         if let Some(tag) = response.get("tag").and_then(|r| r.as_str()) {
                                                             if let Some(state) = response.get("state").and_then(|r| r.as_str()) {
-                                                                if let Ok(state) = EventState::from_str(state) {
-                                                                    if let Ok(page) = ASIAirPage::from_str(page) {
-                                                                        let _ = plate_solve_tx.send(PlateSolveEvent {
-                                                                            page: page,
-                                                                            tag: tag.to_string(),
-                                                                            state: state,
-                                                                        });
-                                                                    }
+                                                                if let Ok(page) = ASIAirPage::from_str(page) {
+                                                                    let _ = plate_solve_tx.send(PlateSolveEvent {
+                                                                        page: page,
+                                                                        tag: tag.to_string(),
+                                                                        state: state.to_string(),
+                                                                    });
                                                                 }
                                                             }
                                                         }
@@ -555,8 +556,8 @@ impl ASIAir {
         self.camera_control_change_tx.subscribe()
     }
 
-    pub fn subscribe_exposure_change(&self) -> watch::Receiver<ExposureChangeEvent> {
-        self.exposure_change_tx.subscribe()
+    pub fn subscribe_exposure(&self) -> watch::Receiver<ExposureEvent> {
+        self.exposure_tx.subscribe()
     }
 
     pub fn subscribe_pi_status(&self) -> watch::Receiver<PiStatusEvent> {

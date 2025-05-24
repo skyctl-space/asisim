@@ -2,6 +2,7 @@ mod connection;
 mod settings;
 pub mod camera;
 
+use serde::{Serialize, Deserialize};
 use byteorder::{BigEndian, ByteOrder};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -44,7 +45,8 @@ pub enum ASIAirLanguage {
     English,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ASIAirPage {
     #[default]
     Preview,
@@ -87,44 +89,21 @@ impl FromStr for ASIAirPage {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub enum EventState {
-    #[default]
-    Start,
+
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(tag = "state")]
+pub enum ExposureEvent {
+    #[serde(rename = "start")]
+    Start{
+        page: ASIAirPage,
+        exp_us: u64,
+        gain: u64,
+    },
+    #[serde(rename = "downloading")]
     Downloading,
-    Complete,
-}
-
-impl EventState {
-    #[allow(dead_code)]
-    pub fn as_str(&self) -> &str {
-        match self {
-            EventState::Start => "start",
-            EventState::Downloading => "downloading",
-            EventState::Complete => "complete",
-        }
-    }
-}
-
-impl FromStr for EventState {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "start" => Ok(EventState::Start),
-            "downloading" => Ok(EventState::Downloading),
-            "complete" => Ok(EventState::Complete),
-            _ => Err(()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct ExposureChangeEvent {
-    pub page: ASIAirPage,
-    pub state: EventState,
-    pub exp_us: u64,
-    pub gain: u32,
+    #[default]
+    #[serde(rename = "complete")]
+    Complete
 }
 
 #[derive(Debug, Clone, Default)]
@@ -139,14 +118,14 @@ pub struct PiStatusEvent {
 pub struct AnnotateEvent {
     pub page: ASIAirPage,
     pub tag: String,
-    pub state: EventState,
+    pub state: String,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct PlateSolveEvent {
     pub page: ASIAirPage,
     pub tag: String,
-    pub state: EventState,
+    pub state: String,
 }
 
 #[allow(dead_code)]
@@ -238,7 +217,7 @@ pub struct ASIAir {
     pub camera_state_change_tx: watch::Sender<()>,
     pub cooler_power_tx: watch::Sender<i32>,
     pub camera_control_change_tx: watch::Sender<()>,
-    pub exposure_change_tx: watch::Sender<ExposureChangeEvent>,
+    pub exposure_tx: watch::Sender<ExposureEvent>,
     pub pi_status_tx: watch::Sender<PiStatusEvent>,
     pub annotate_tx: watch::Sender<AnnotateEvent>,
     pub plate_solve_tx: watch::Sender<PlateSolveEvent>,
