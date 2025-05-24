@@ -30,7 +30,7 @@ pub struct CameraInfo {
     pub has_cooler: bool,
     pub is_color: bool,
     pub is_usb3_host: bool,
-    pub debayer_pattern: String,
+    pub debayer_pattern: Option<String>,
 }
 
 enum CameraControl {
@@ -133,11 +133,12 @@ impl ASIAir {
     }
 
     pub async fn main_camera_open(
-        &mut self
-        //camera: ConnectedCamera
+        &mut self,
+        camera_id: u32,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let method = "open_camera";
-        self.rpc_request_4700(method, None).await?;
+        let params = Some(serde_json::json!([ camera_id ]));
+        self.rpc_request_4700(method, params).await?;
 
         Ok(())
     }

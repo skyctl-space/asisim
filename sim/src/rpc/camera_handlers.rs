@@ -17,21 +17,37 @@ pub fn get_camera_state(_: &Option<Value>, state: Arc<Mutex<ASIAirState>>) -> Re
     Ok((serde_json::to_value(&state.camera_state).unwrap(), 0))
 }
 
-pub async fn open_camera(_: &Option<Value>, state: Arc<Mutex<ASIAirState>>, event_tx: tokio::sync::mpsc::Sender<Value>) -> Result<(Value, u8), (String, u8)> {
+pub async fn open_camera(params: &Option<Value>, state: Arc<Mutex<ASIAirState>>, event_tx: tokio::sync::mpsc::Sender<Value>) -> Result<(Value, u8), (String, u8)> {
     // Need this pattern to avoid sending the MutexGuard across the async call 
     let mut success: bool = false;
 
     {
         let mut state = state.lock().unwrap();
 
-        for camera in state.connected_cameras.iter() {
-            if camera.name == state.app_setting.main_camera_name {
-                state.camera_state = CameraState::Idle {
-                    name: state.app_setting.main_camera_name.clone(),
-                    path: camera.path.clone(),
-                };
-                success = true;
-                break;
+        match params {
+            Some(value) => {
+                if !value.is_array() {
+                    return Err(("params is not an array".to_string(), 1));
+                }
+                if let Some(camera_index) = value[0].as_u64() {
+                    let camera_index = camera_index as usize;
+
+                    if camera_index < state.connected_cameras.len() {
+                        let camera = &state.connected_cameras[camera_index];
+                        state.camera_state = CameraState::Idle {
+                            name: camera.name.clone(),
+                            path: camera.path.clone(),
+                        };
+                        success = true;
+                    } else {
+                        return Err(("Camera index out of bounds".to_string(), 1));
+                    }
+                } else {
+                    return Err(("Invalid camera index".to_string(), 1));
+                }
+            }
+            None => {
+                return Err(("params is not provided".to_string(), 1));
             }
         }
     }

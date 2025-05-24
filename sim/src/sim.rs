@@ -541,7 +541,8 @@ pub struct CameraInfo {
     pub has_cooler: bool,
     pub is_color: bool,
     pub is_usb3_host: bool,
-    pub debayer_pattern: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debayer_pattern: Option<String>,
 }
 
 pub static CAMERAS_INFO: Lazy<HashMap<&'static str, CameraInfo>> = Lazy::new(|| {
@@ -556,7 +557,7 @@ pub static CAMERAS_INFO: Lazy<HashMap<&'static str, CameraInfo>> = Lazy::new(|| 
             has_cooler: true,
             is_color: true,
             is_usb3_host: true,
-            debayer_pattern: "RG".to_string(),
+            debayer_pattern: Some("RG".to_string()),
         },
     );
     m

@@ -188,6 +188,7 @@ pub struct ASIAir {
     pub addr: Ipv4Addr,
     // Time waiting for command response
     cmd_timeout: Duration,
+    binary_cmd_timeout: Duration,
 
     // Channel for async commmands to send to the ASIAir
     tx_4500: Option<mpsc::Sender<ASIAirCommand>>,

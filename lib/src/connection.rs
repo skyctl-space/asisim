@@ -34,6 +34,7 @@ impl ASIAir {
         ASIAir {
             addr,
             cmd_timeout: Duration::from_secs(5),
+            binary_cmd_timeout: Duration::from_secs(120),
             tx_4500: None,
             tx_4700: None,
             tx_4800: None,
@@ -128,6 +129,22 @@ impl ASIAir {
         let annotate_tx = self.annotate_tx.clone();
         let plate_solve_tx = self.plate_solve_tx.clone();
 
+        let socket_4800 = SocketAddrV4::new(self.addr.clone(), 4800);
+        let stream_4800 = TcpStream::connect(socket_4800).await?;
+        let (mut reader_4800, mut writer_4800) = tokio::io::split(stream_4800);
+        let mut shutdown_reader_rx_4800 = shutdown_rx.clone();
+        let mut shutdown_writer_rx_4800 = shutdown_rx.clone();
+        let reconnect_tx_reader_4800 = self.reconnect_tx.clone().unwrap();
+        let reconnect_tx_reader_4800_watchdog = self.reconnect_tx.clone().unwrap();
+        let should_be_connected_4800 = self.should_be_connected.clone();
+
+        // Create a new pending responses map for port 4800
+        let pending_responses_writer_4800 = Arc::clone(&self.pending_responses_4800);
+        let pending_responses_reader_4800 = Arc::clone(&self.pending_responses_4800);
+
+        let (tx_4800, mut rx_4800) = mpsc::channel::<ASIAirCommand>(32);
+        self.tx_4800 = Some(tx_4800.clone());
+
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -152,6 +169,25 @@ impl ASIAir {
                                 Ok(Err(_)) | Err(_) => {
                                     log::warn!("Connection to ASIAir lost or timed out");
                                     let _ = reconnect_tx.send(()).await;
+                                }
+                            }
+                        }
+
+                        let (response_tx, response_rx) = oneshot::channel();
+                        let command = ASIAirCommand::BinaryGet {
+                            method: "test_connection".to_string(),
+                            params: None,
+                            tx: response_tx,
+                        };
+                        if tx_4800.send(command).await.is_ok() {
+                            // Wait for the response with a timeout
+                            match tokio::time::timeout(Duration::from_secs(60), response_rx).await {
+                                Ok(Ok(_response)) => {
+                                    // log::debug!("Watchdog response received: {:?}", response);
+                                }
+                                Ok(Err(_)) | Err(_) => {
+                                    log::warn!("Connection to ASIAir lost or timed out");
+                                    let _ = reconnect_tx_reader_4800_watchdog.send(()).await;
                                 }
                             }
                         }
@@ -373,21 +409,6 @@ impl ASIAir {
                 }
             }
         });
-
-        let socket_4800 = SocketAddrV4::new(self.addr.clone(), 4800);
-        let stream_4800 = TcpStream::connect(socket_4800).await?;
-        let (mut reader_4800, mut writer_4800) = tokio::io::split(stream_4800);
-        let mut shutdown_reader_rx_4800 = shutdown_rx.clone();
-        let mut shutdown_writer_rx_4800 = shutdown_rx.clone();
-        let reconnect_tx_reader_4800 = self.reconnect_tx.clone().unwrap();
-        let should_be_connected_4800 = self.should_be_connected.clone();
-
-        // Create a new pending responses map for port 4800
-        let pending_responses_writer_4800 = Arc::clone(&self.pending_responses_4800);
-        let pending_responses_reader_4800 = Arc::clone(&self.pending_responses_4800);
-
-        let (tx_4800, mut rx_4800) = mpsc::channel::<ASIAirCommand>(32);
-        self.tx_4800 = Some(tx_4800.clone());
 
         // Read loop for port 4800
         tokio::spawn(async move {
@@ -616,8 +637,8 @@ impl ASIAir {
             };
             tx.send(command).await.unwrap();
 
-            // Wait for the response with a timeout
-            match tokio::time::timeout(self.cmd_timeout, response_rx).await {
+            // Wait for the response with a timeout for this port we have an longer timeout
+            match tokio::time::timeout(self.binary_cmd_timeout, response_rx).await {
                 Ok(Ok(result)) => result,
                 Ok(Err(_)) | Err(_) => Err("Failed to get response".into()),
             }
